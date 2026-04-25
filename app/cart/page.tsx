@@ -6,19 +6,13 @@ import Link from 'next/link'
 import gsap from 'gsap'
 import Navbar from '../components/Navbar'
 import { Trash2, Plus, Minus, CreditCard } from 'lucide-react'
-
-// Mock Data
-const cartItems = [
-  { id: 1, title: 'HOODIE', price: 95.00, quantity: 1, image: '/images/image 2.jpeg', size: 'L' },
-  { id: 2, title: 'BELT BAG', price: 45.00, quantity: 2, image: '/images/image 1.jpeg', size: 'ONE SIZE' },
-]
+import { useCart } from '../hooks/useCart'
 
 export default function CartPage() {
   const containerRef = useRef(null)
-
-  const subtotal = cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0)
+  const { items, subtotal, updateQuantity, removeItem } = useCart()
   const shipping = 15.00
-  const total = subtotal + shipping
+  const total = items.length > 0 ? subtotal + shipping : 0
 
   useEffect(() => {
     const ctx = gsap.context(() => {
@@ -69,8 +63,13 @@ export default function CartPage() {
           {/* Left Column - Cart Items */}
           <div className="flex-1">
              <div className="space-y-6">
-                 {cartItems.map((item) => (
-                    <div key={item.id} className="cart-item-anim flex gap-6 p-4 rounded-3xl bg-white/5 border border-white/10 glass shadow-lg">
+                 {items.length === 0 ? (
+                    <div className="cart-item-anim p-8 rounded-3xl bg-white/5 border border-white/10 glass shadow-lg text-center">
+                      <p className="text-gray-300 mb-4">Your cart is empty.</p>
+                      <Link href="/products" className="underline text-white">Browse Products</Link>
+                    </div>
+                 ) : items.map((item) => (
+                    <div key={`${item.id}-${item.size}`} className="cart-item-anim flex gap-6 p-4 rounded-3xl bg-white/5 border border-white/10 glass shadow-lg">
                        {/* Item Image */}
                        <div className="relative w-28 h-36 md:w-36 md:h-48 rounded-2xl overflow-hidden bg-white/10 flex-shrink-0">
                           <Image 
@@ -94,16 +93,25 @@ export default function CartPage() {
                           <div className="flex justify-between items-end">
                              {/* Quantity Control */}
                              <div className="flex items-center gap-4 bg-black/40 rounded-full px-4 py-2 border border-white/10">
-                                <button className="text-gray-400 hover:text-white transition-colors cursor-pointer">
+                                <button
+                                  onClick={() => updateQuantity(item.id, item.size, item.quantity - 1)}
+                                  className="text-gray-400 hover:text-white transition-colors cursor-pointer"
+                                >
                                    <Minus size={16} />
                                 </button>
                                 <span className="font-bebas text-lg w-4 text-center">{item.quantity}</span>
-                                <button className="text-gray-400 hover:text-white transition-colors cursor-pointer">
+                                <button
+                                  onClick={() => updateQuantity(item.id, item.size, item.quantity + 1)}
+                                  className="text-gray-400 hover:text-white transition-colors cursor-pointer"
+                                >
                                    <Plus size={16} />
                                 </button>
                              </div>
 
-                             <button className="text-gray-500 hover:text-red-400 transition-colors p-2 cursor-pointer">
+                             <button
+                               onClick={() => removeItem(item.id, item.size)}
+                               className="text-gray-500 hover:text-red-400 transition-colors p-2 cursor-pointer"
+                             >
                                 <Trash2 size={20} />
                              </button>
                           </div>
@@ -158,7 +166,14 @@ export default function CartPage() {
                  </div>
 
                  {/* Checkout Button */}
-                 <button className="w-full py-4 bg-[var(--color-foreground)] text-[var(--background)] font-bebas text-2xl tracking-wider rounded-xl shadow-[0_8px_30px_rgb(255,255,255,0.1)] hover:bg-[var(--color-accent)] hover:text-black hover:scale-[1.02] transition-all cursor-pointer">
+                 <button
+                   disabled={items.length === 0}
+                   className={`w-full py-4 font-bebas text-2xl tracking-wider rounded-xl shadow-[0_8px_30px_rgb(255,255,255,0.1)] transition-all ${
+                     items.length === 0
+                       ? 'bg-gray-500 text-gray-300 cursor-not-allowed'
+                       : 'bg-[var(--color-foreground)] text-[var(--background)] hover:bg-[var(--color-accent)] hover:text-black hover:scale-[1.02] cursor-pointer'
+                   }`}
+                 >
                     PAY NOW
                  </button>
                  

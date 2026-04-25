@@ -7,6 +7,7 @@ import { useParams } from 'next/navigation'
 import gsap from 'gsap'
 import { ShoppingCart, Star, StarHalf } from 'lucide-react'
 import Navbar from '../../components/Navbar'
+import { addToCart } from '@/lib/cart'
 
 type Product = {
   id: string
@@ -94,7 +95,15 @@ export default function ProductDetailsPage() {
   }, [product])
 
   const handleAddToCart = (e: React.MouseEvent) => {
+    if (!product || isOutOfStock) return
     e.preventDefault()
+    addToCart({
+      id: product.id,
+      title: product.title,
+      image: product.image,
+      price: product.price,
+      size: selectedSize,
+    })
 
     // 1. Target the button for a quick glow/pop
     const btn = e.currentTarget
@@ -236,7 +245,7 @@ export default function ProductDetailsPage() {
                         className={`w-14 h-14 rounded-full font-bebas text-xl flex items-center justify-center border transition-all ${
                           selectedSize === size 
                             ? 'bg-[var(--color-foreground)] text-[var(--background)] border-[var(--color-foreground)] scale-110 shadow-[0_0_20px_rgba(255,255,255,0.2)]' 
-                            : 'bg-transparent text-white border-white/20 hover:border-white/60'
+                            : 'bg-white/70 text-black border-black/20 hover:bg-white hover:border-black/50'
                         }`}
                       >
                          {size}
