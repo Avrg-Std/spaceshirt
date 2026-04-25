@@ -1,26 +1,44 @@
 @import "tailwindcss";
 
+@theme {
+  --color-bg: #F4F4F4;
+  --color-foreground: #111111;
+  --color-muted: #8E8E8E;
+  --color-accent: #FFD600;
+
+  --font-bebas: var(--font-bebas);
+  --font-inter: var(--font-inter);
+
+  --radius-2xl: 24px;
+  --radius-3xl: 32px;
+  
+  --shadow-card: 0 10px 30px rgba(0,0,0,.06);
+  --shadow-soft: 0 20px 60px rgba(0,0,0,.08);
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --background: #F4F4F4;
+  --foreground: #111111;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-inter), sans-serif;
+  overflow-x: hidden;
+}
+
+.glass {
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+/* Custom scrollbar hide for carousel */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
