@@ -1,11 +1,12 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
+import { useRouter, useSearchParams } from 'next/navigation'
 import gsap from 'gsap'
 import Navbar from '../components/Navbar'
-import { Trash2, Plus, Minus, MapPin, Loader2, Check, Banknote, Smartphone } from 'lucide-react'
+import { Trash2, Plus, Minus, MapPin, Loader2, Check, Banknote, Smartphone, X } from 'lucide-react'
 import { useCart } from '../hooks/useCart'
 
 type PaymentMethod = 'cod' | 'omt' | 'whish'
@@ -31,12 +32,14 @@ const PAYMENT_METHODS: {
   {
     id: 'whish',
     label: 'Whish',
-    description: 'Pay instantly with Whish Money',
+    description: 'Pay securely via Whish Pay API checkout',
     icon: Smartphone,
   },
 ]
 
-export default function CartPage() {
+function CartPageContent() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const containerRef = useRef(null)
   const { items, subtotal, updateQuantity, removeItem, clearCart } = useCart()
   const shipping = 15.0
@@ -51,8 +54,10 @@ export default function CartPage() {
   const [selectedPayment, setSelectedPayment] = useState<PaymentMethod | null>(null)
   const [orderPlaced, setOrderPlaced] = useState(false)
   const [placedOrderId, setPlacedOrderId] = useState<string | null>(null)
+  const [placedPaymentMethod, setPlacedPaymentMethod] = useState<PaymentMethod | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [formError, setFormError] = useState('')
+  const handledWhishReturn = useRef(false)
 
   const detectLocation = useCallback(async () => {
     setLocationStatus('loading')
@@ -107,6 +112,30 @@ export default function CartPage() {
   }, [detectLocation])
 
   useEffect(() => {
+    if (handledWhishReturn.current) return
+    const whishStatus = searchParams.get('whish')
+    const returnedOrderId = searchParams.get('orderId')
+    if (!whishStatus) return
+
+    handledWhishReturn.current = true
+
+    if (whishStatus === 'success') {
+      setPlacedOrderId(returnedOrderId)
+      setPlacedPaymentMethod('whish')
+      setOrderPlaced(true)
+      clearCart()
+    } else if (whishStatus === 'failed') {
+      setFormError(
+        returnedOrderId
+          ? `Whish payment was not completed for order ${returnedOrderId}. You can try again.`
+          : 'Whish payment was not completed. You can try again.'
+      )
+    }
+
+    router.replace('/cart', { scroll: false })
+  }, [searchParams, clearCart, router])
+
+  useEffect(() => {
     const ctx = gsap.context(() => {
       gsap.from('.cart-header', {
         y: 30,
@@ -143,6 +172,26 @@ export default function CartPage() {
       { y: 0, opacity: 1, duration: 0.35, stagger: 0.08, ease: 'power2.out' }
     )
   }, [showPaymentMethods])
+
+  useEffect(() => {
+    if (!orderPlaced) return
+    gsap.fromTo(
+      '.order-success-modal',
+      { opacity: 0, scale: 0.92, y: 16 },
+      { opacity: 1, scale: 1, y: 0, duration: 0.35, ease: 'power2.out' }
+    )
+    gsap.fromTo(
+      '.order-success-backdrop',
+      { opacity: 0 },
+      { opacity: 1, duration: 0.25, ease: 'power1.out' }
+    )
+  }, [orderPlaced])
+
+  const closeOrderSuccessModal = () => {
+    setOrderPlaced(false)
+    setPlacedOrderId(null)
+    setPlacedPaymentMethod(null)
+  }
 
   const handlePayNow = () => {
     setFormError('')
@@ -207,6 +256,13 @@ export default function CartPage() {
       }
 
       setPlacedOrderId(data.order?.orderId ?? null)
+      setPlacedPaymentMethod(selectedPayment)
+
+      if (selectedPayment === 'whish' && data.paymentUrl) {
+        window.location.href = data.paymentUrl
+        return
+      }
+
       setOrderPlaced(true)
       clearCart()
       setShowPaymentMethods(false)
@@ -236,13 +292,90 @@ export default function CartPage() {
         </div>
 
         {orderPlaced && (
-          <div className="mb-8 rounded-2xl border border-green-700/40 bg-green-100 px-6 py-4 text-green-900 font-medium">
-            <p>Order placed successfully. We&apos;ll contact you shortly to confirm delivery.</p>
-            {placedOrderId && (
-              <p className="mt-2 text-sm font-semibold tracking-wide">
-                Order ID: <span className="font-mono">{placedOrderId}</span>
+          <div className="fixed inset-0 z-[100] flex items-center justify-center px-6">
+            <button
+              type="button"
+              aria-label="Close success dialog"
+              onClick={closeOrderSuccessModal}
+              className="order-success-backdrop absolute inset-0 bg-black/45 cursor-pointer"
+            />
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="order-success-title"
+              className="order-success-modal relative z-10 w-full max-w-md rounded-3xl bg-white border border-black/10 shadow-2xl p-8 text-center"
+            >
+              <button
+                type="button"
+                onClick={closeOrderSuccessModal}
+                className="absolute top-4 right-4 p-2 rounded-full text-neutral-500 hover:text-black hover:bg-neutral-100 transition-colors cursor-pointer"
+                aria-label="Close"
+              >
+                <X size={20} />
+              </button>
+
+              <div className="mx-auto mb-5 w-14 h-14 rounded-full bg-green-100 border border-green-700/30 flex items-center justify-center">
+                <Check size={28} className="text-green-800" strokeWidth={2.5} />
+              </div>
+
+              <h2
+                id="order-success-title"
+                className="font-bebas text-3xl tracking-wide text-black mb-3"
+              >
+                Order Placed
+              </h2>
+              <p className="text-neutral-700 leading-relaxed mb-5">
+                {placedPaymentMethod === 'whish'
+                  ? "Payment received through Whish. We'll contact you shortly to confirm delivery."
+                  : "Order placed successfully. We'll contact you shortly to confirm delivery."}
               </p>
-            )}
+              {placedOrderId && (
+                <div
+                  className={`rounded-2xl bg-neutral-100 border border-black/10 px-4 py-3 ${
+                    placedPaymentMethod === 'omt' ? 'mb-4' : 'mb-6'
+                  }`}
+                >
+                  <p className="text-xs uppercase tracking-wider text-neutral-600 mb-1">Order ID</p>
+                  <p className="font-mono text-lg font-semibold text-black tracking-wide">
+                    {placedOrderId}
+                  </p>
+                </div>
+              )}
+              {placedPaymentMethod === 'omt' && (
+                <div className="rounded-2xl bg-amber-50 border border-amber-300 px-4 py-4 mb-6 text-left">
+                  <p className="text-xs font-bold uppercase tracking-wider text-amber-900 mb-2">
+                    OMT Payment Instructions
+                  </p>
+                  <p className="text-sm text-amber-950 leading-relaxed">
+                    Open the OMT app and complete the payment manually. In the payment notes,
+                    enter your Order ID
+                    {placedOrderId ? (
+                      <>
+                        {' '}
+                        <span className="font-mono font-semibold">({placedOrderId})</span>
+                      </>
+                    ) : null}{' '}
+                    so we can match and confirm your order.
+                  </p>
+                </div>
+              )}
+              <div className="flex flex-col gap-2">
+                <Link
+                  href="/products"
+                  onClick={closeOrderSuccessModal}
+                  className="w-full py-3.5 font-bebas text-xl tracking-wider rounded-xl bg-black text-white hover:bg-[var(--color-accent)] hover:text-black transition-all text-center"
+                >
+                  Continue Shopping
+                </Link>
+                <button
+                  type="button"
+                  onClick={closeOrderSuccessModal}
+                  className="w-full py-2 text-xs uppercase tracking-wider text-neutral-600 hover:text-black font-semibold transition-colors cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
@@ -479,5 +612,22 @@ export default function CartPage() {
         </div>
       </div>
     </main>
+  )
+}
+
+export default function CartPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="min-h-screen bg-[var(--background)] pt-32 pb-24">
+          <Navbar />
+          <div className="max-w-7xl mx-auto px-6 md:px-12">
+            <p className="text-neutral-600">Loading cart...</p>
+          </div>
+        </main>
+      }
+    >
+      <CartPageContent />
+    </Suspense>
   )
 }

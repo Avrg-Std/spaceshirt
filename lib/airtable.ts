@@ -211,6 +211,8 @@ export type CreateCustomerOrderInput = {
   subtotal: number;
   shipping: number;
   total: number;
+  status?: string;
+  whishExternalId?: string;
   items: Array<{
     id: string;
     title: string;
@@ -231,7 +233,35 @@ export type CustomerOrder = {
   subtotal: number;
   shipping: number;
   total: number;
+  whishExternalId?: string;
 };
+
+function getOrdersTablePath(): string {
+  const baseId = requiredEnv("AIRTABLE_BASE_ID");
+  const tableName =
+    process.env.AIRTABLE_ORDERS_TABLE_NAME?.trim() || "Customer Orders";
+  return `${baseId}/${encodeURIComponent(tableName)}`;
+}
+
+function mapRecordToCustomerOrder(record: AirtableRecord): CustomerOrder {
+  const paymentMethod = firstString(record.fields["Payment Method"]) as
+    | PaymentMethodLabel
+    | null;
+
+  return {
+    id: record.id,
+    orderId: firstString(record.fields["Order ID"]) ?? "",
+    email: firstString(record.fields.Email) ?? "",
+    phone: firstString(record.fields.Phone) ?? "",
+    location: firstString(record.fields.Location) ?? "",
+    paymentMethod: paymentMethod ?? "Cash on Delivery",
+    status: firstString(record.fields.Status) ?? "Pending",
+    subtotal: toNumber(record.fields.Subtotal) ?? 0,
+    shipping: toNumber(record.fields.Shipping) ?? 0,
+    total: toNumber(record.fields.Total) ?? 0,
+    whishExternalId: firstString(record.fields["Whish External ID"]) ?? undefined,
+  };
+}
 
 function generateOrderId(): string {
   const now = new Date();
@@ -262,11 +292,8 @@ function formatOrderItems(
 export async function createCustomerOrder(
   input: CreateCustomerOrderInput
 ): Promise<CustomerOrder> {
-  const baseId = requiredEnv("AIRTABLE_BASE_ID");
-  const tableName =
-    process.env.AIRTABLE_ORDERS_TABLE_NAME?.trim() || "Customer Orders";
-  const encodedTable = encodeURIComponent(tableName);
   const orderId = generateOrderId();
+  const status = input.status ?? "Pending";
 
   const productRecordIds = Array.from(
     new Set(input.items.map((item) => item.id).filter(isAirtableRecordId))
@@ -278,7 +305,7 @@ export async function createCustomerOrder(
     Phone: input.phone,
     Location: input.location,
     "Payment Method": input.paymentMethod,
-    Status: "Pending",
+    Status: status,
     Subtotal: input.subtotal,
     Shipping: input.shipping,
     Total: input.total,
@@ -286,11 +313,15 @@ export async function createCustomerOrder(
     "Order Date": new Date().toISOString(),
   };
 
+  if (input.whishExternalId) {
+    fields["Whish External ID"] = input.whishExternalId;
+  }
+
   if (productRecordIds.length > 0) {
     fields.Products = productRecordIds;
   }
 
-  const data = await mutateAirtable(`${baseId}/${encodedTable}`, "POST", {
+  const data = await mutateAirtable(getOrdersTablePath(), "POST", {
     records: [{ fields }],
     typecast: true,
   });
@@ -307,11 +338,46 @@ export async function createCustomerOrder(
     phone: input.phone,
     location: input.location,
     paymentMethod: input.paymentMethod,
-    status: "Pending",
+    status,
     subtotal: input.subtotal,
     shipping: input.shipping,
     total: input.total,
+    whishExternalId: input.whishExternalId,
   };
+}
+
+export async function getCustomerOrderByWhishExternalId(
+  whishExternalId: string | number
+): Promise<CustomerOrder | null> {
+  const externalId = String(whishExternalId);
+  const query = new URLSearchParams();
+  query.set("pageSize", "1");
+  query.set("filterByFormula", `{Whish External ID} = "${externalId.replace(/"/g, '\\"')}"`);
+
+  const data = await fetchAirtable(`${getOrdersTablePath()}?${query.toString()}`);
+  const record = data.records[0];
+  return record ? mapRecordToCustomerOrder(record) : null;
+}
+
+export async function updateCustomerOrderStatusByWhishExternalId(
+  whishExternalId: string | number,
+  status: string
+): Promise<CustomerOrder | null> {
+  const existing = await getCustomerOrderByWhishExternalId(whishExternalId);
+  if (!existing) return null;
+
+  const data = await mutateAirtable(getOrdersTablePath(), "PATCH", {
+    records: [
+      {
+        id: existing.id,
+        fields: { Status: status },
+      },
+    ],
+    typecast: true,
+  });
+
+  const record = data.records[0];
+  return record ? mapRecordToCustomerOrder(record) : existing;
 }
 
 export async function getProducts(): Promise<Product[]> {

@@ -3,6 +3,7 @@ import {
   createCustomerOrder,
   type PaymentMethodLabel,
 } from "@/lib/airtable";
+import { getWebsiteUrl, getWhishClient, isWhishConfigured } from "@/lib/whish";
 
 const PAYMENT_METHODS: PaymentMethodLabel[] = [
   "Cash on Delivery",
@@ -79,6 +80,66 @@ export async function POST(request: Request) {
     const shipping = typeof body.shipping === "number" ? body.shipping : 15;
     const total = typeof body.total === "number" ? body.total : subtotal + shipping;
 
+    if (paymentMethod === "Whish") {
+      if (!isWhishConfigured()) {
+        return NextResponse.json(
+          {
+            error:
+              "Whish Pay is not configured yet. Add WHISH_CHANNEL, WHISH_SECRET, and WEBSITE_URL.",
+          },
+          { status: 503 }
+        );
+      }
+
+      const whish = getWhishClient();
+      const websiteUrl = getWebsiteUrl();
+      const externalId = whish.generateExternalId();
+
+      const order = await createCustomerOrder({
+        email,
+        phone,
+        location,
+        paymentMethod: "Whish",
+        subtotal,
+        shipping,
+        total,
+        items,
+        status: "Awaiting Payment",
+        whishExternalId: String(externalId),
+      });
+
+      const payment = await whish.createPayment({
+        amount: total,
+        currency: "USD",
+        invoice: `Order ${order.orderId}`,
+        externalId,
+        successCallbackUrl: `${websiteUrl}/api/whish/callback/success`,
+        failureCallbackUrl: `${websiteUrl}/api/whish/callback/failure`,
+        successRedirectUrl: `${websiteUrl}/cart?whish=success&orderId=${encodeURIComponent(order.orderId)}`,
+        failureRedirectUrl: `${websiteUrl}/cart?whish=failed&orderId=${encodeURIComponent(order.orderId)}`,
+      });
+
+      if (!payment.success || !payment.collectUrl) {
+        return NextResponse.json(
+          {
+            error: payment.dialog?.message ?? "Failed to start Whish payment",
+            code: payment.code,
+            order,
+          },
+          { status: 400 }
+        );
+      }
+
+      return NextResponse.json(
+        {
+          order,
+          paymentUrl: payment.collectUrl,
+          externalId,
+        },
+        { status: 201 }
+      );
+    }
+
     const order = await createCustomerOrder({
       email,
       phone,
@@ -88,6 +149,7 @@ export async function POST(request: Request) {
       shipping,
       total,
       items,
+      status: "Pending",
     });
 
     return NextResponse.json({ order }, { status: 201 });
