@@ -4,7 +4,7 @@ import {
   getCustomerOrderByWhishExternalId,
   updateCustomerOrderStatusByWhishExternalId,
 } from "@/lib/airtable";
-import { getWhishClient, isWhishConfigured } from "@/lib/whish";
+import { getWhishClient, isWhishConfigured, isWhishMockMode } from "@/lib/whish";
 
 export async function GET(request: Request) {
   try {
@@ -17,16 +17,23 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Missing callback parameters" }, { status: 400 });
     }
 
+    const order = await getCustomerOrderByWhishExternalId(parsed.externalId);
+    if (!order) {
+      return NextResponse.json({ ok: false, reason: "Order not found" }, { status: 404 });
+    }
+
+    if (isWhishMockMode()) {
+      if (order.status !== "Confirmed") {
+        await updateCustomerOrderStatusByWhishExternalId(parsed.externalId, "Confirmed");
+      }
+      return NextResponse.json({ ok: true, orderId: order.orderId, mock: true });
+    }
+
     const whish = getWhishClient();
     const status = await whish.getPaymentStatus(parsed.currency, parsed.externalId);
 
     if (status.collectStatus !== "success") {
       return NextResponse.json({ ok: false, reason: "Payment not successful" });
-    }
-
-    const order = await getCustomerOrderByWhishExternalId(parsed.externalId);
-    if (!order) {
-      return NextResponse.json({ ok: false, reason: "Order not found" }, { status: 404 });
     }
 
     if (!whish.validateAmount(status.amount ?? 0, order.total, parsed.currency)) {

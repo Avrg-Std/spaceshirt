@@ -3,7 +3,7 @@ import {
   createCustomerOrder,
   type PaymentMethodLabel,
 } from "@/lib/airtable";
-import { getWebsiteUrl, getWhishClient, isWhishConfigured } from "@/lib/whish";
+import { getWebsiteUrl, getWhishClient, generateMockExternalId, isWhishConfigured, isWhishMockMode } from "@/lib/whish";
 
 const PAYMENT_METHODS: PaymentMethodLabel[] = [
   "Cash on Delivery",
@@ -91,8 +91,51 @@ export async function POST(request: Request) {
         );
       }
 
-      const whish = getWhishClient();
       const websiteUrl = getWebsiteUrl();
+      const headerOrigin = request.headers.get("origin")?.replace(/\/$/, "");
+      const forwardedHost = request.headers.get("x-forwarded-host");
+      const forwardedProto = request.headers.get("x-forwarded-proto") || "https";
+      const requestOrigin =
+        headerOrigin ||
+        (forwardedHost ? `${forwardedProto}://${forwardedHost}` : websiteUrl);
+
+      if (isWhishMockMode()) {
+        const externalId = generateMockExternalId();
+        const order = await createCustomerOrder({
+          email,
+          phone,
+          location,
+          paymentMethod: "Whish",
+          subtotal,
+          shipping,
+          total,
+          items,
+          status: "Awaiting Payment",
+          whishExternalId: String(externalId),
+        });
+
+        const successRedirectUrl = `${requestOrigin}/cart?whish=success&orderId=${encodeURIComponent(order.orderId)}`;
+        const failureRedirectUrl = `${requestOrigin}/cart?whish=failed&orderId=${encodeURIComponent(order.orderId)}`;
+        const paymentUrl =
+          `${requestOrigin}/checkout/whish-mock` +
+          `?orderId=${encodeURIComponent(order.orderId)}` +
+          `&externalId=${encodeURIComponent(String(externalId))}` +
+          `&amount=${encodeURIComponent(String(total))}` +
+          `&successUrl=${encodeURIComponent(successRedirectUrl)}` +
+          `&failureUrl=${encodeURIComponent(failureRedirectUrl)}`;
+
+        return NextResponse.json(
+          {
+            order,
+            paymentUrl,
+            externalId,
+            mock: true,
+          },
+          { status: 201 }
+        );
+      }
+
+      const whish = getWhishClient();
       const externalId = whish.generateExternalId();
 
       const order = await createCustomerOrder({
