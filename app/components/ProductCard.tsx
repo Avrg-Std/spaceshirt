@@ -5,6 +5,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import gsap from 'gsap'
 import { ShoppingCart } from 'lucide-react'
+import { addToCart } from '@/lib/cart'
 
 interface ProductCardProps {
   id?: number | string // Added id prop
@@ -25,6 +26,15 @@ export default function ProductCard({ id, image, title, price, stock, className 
     if (isOutOfStock) return
     e.preventDefault() 
     e.stopPropagation()
+
+    const parsedPrice = Number(price.replace(/[^0-9.-]/g, '')) || 0
+    addToCart({
+      id: String(id || 1),
+      title,
+      image,
+      price: parsedPrice,
+      size: 'ONE SIZE',
+    })
 
     // 1. Subtle confirmation glow on the card
     if (cardRef.current) {

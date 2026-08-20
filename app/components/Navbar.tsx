@@ -5,9 +5,11 @@ import Link from 'next/link'
 import Image from 'next/image'
 import gsap from 'gsap'
 import { ShoppingCart } from 'lucide-react'
+import { useCart } from '../hooks/useCart'
 
 export default function Navbar() {
   const cartIconRef = useRef(null)
+  const { itemCount } = useCart()
 
   useEffect(() => {
     const handleCartBounce = () => {
@@ -52,8 +54,13 @@ export default function Navbar() {
 
       <div className="pointer-events-auto">
         <Link href="/cart">
-          <button id="nav-cart-icon" ref={cartIconRef} className="w-10 h-10 rounded-full bg-[var(--color-accent)] flex items-center justify-center hover:scale-105 transition-transform origin-center cursor-pointer">
+          <button id="nav-cart-icon" ref={cartIconRef} className="relative w-10 h-10 rounded-full bg-[var(--color-accent)] flex items-center justify-center hover:scale-105 transition-transform origin-center cursor-pointer">
             <ShoppingCart size={18} className="text-black" />
+            {itemCount > 0 && (
+              <span className="absolute -top-2 -right-2 min-w-5 h-5 px-1 rounded-full bg-black text-white text-[10px] leading-5 text-center font-bold">
+                {itemCount}
+              </span>
+            )}
           </button>
         </Link>
       </div>

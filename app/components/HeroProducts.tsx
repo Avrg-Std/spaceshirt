@@ -49,6 +49,7 @@ export default function HeroProducts() {
                    </div>
                 )}
                 <ProductCard 
+                  id={p.id}
                   image={p.image} 
                   title={p.title} 
                   price={p.price}
