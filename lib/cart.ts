@@ -84,6 +84,10 @@ export function removeCartItem(id: string, size: string) {
   writeCartToStorage(nextItems)
 }
 
+export function clearCart() {
+  writeCartToStorage([])
+}
+
 export function subscribeToCart(listener: () => void) {
   if (typeof window === 'undefined') return () => {}
   window.addEventListener(CART_EVENT, listener)

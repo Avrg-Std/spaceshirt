@@ -3,6 +3,7 @@
 import { useSyncExternalStore } from 'react'
 import {
   addToCart,
+  clearCart,
   getCartItems,
   removeCartItem,
   subscribeToCart,
@@ -60,5 +61,6 @@ export function useCart() {
     addItem: (item: Omit<CartItem, 'quantity'>, quantity?: number) => addToCart(item, quantity),
     removeItem: removeCartItem,
     updateQuantity: updateCartItemQuantity,
+    clearCart,
   }
 }
