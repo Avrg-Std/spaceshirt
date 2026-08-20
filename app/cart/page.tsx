@@ -50,6 +50,8 @@ export default function CartPage() {
   const [showPaymentMethods, setShowPaymentMethods] = useState(false)
   const [selectedPayment, setSelectedPayment] = useState<PaymentMethod | null>(null)
   const [orderPlaced, setOrderPlaced] = useState(false)
+  const [placedOrderId, setPlacedOrderId] = useState<string | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [formError, setFormError] = useState('')
 
   const detectLocation = useCallback(async () => {
@@ -162,16 +164,58 @@ export default function CartPage() {
     setShowPaymentMethods(true)
   }
 
-  const handleConfirmPayment = () => {
+  const handleConfirmPayment = async () => {
     if (!selectedPayment) {
       setFormError('Select a payment method to continue.')
       return
     }
+
+    const paymentMethod = PAYMENT_METHODS.find((method) => method.id === selectedPayment)
+    if (!paymentMethod) {
+      setFormError('Select a payment method to continue.')
+      return
+    }
+
     setFormError('')
-    setOrderPlaced(true)
-    clearCart()
-    setShowPaymentMethods(false)
-    setSelectedPayment(null)
+    setIsSubmitting(true)
+
+    try {
+      const response = await fetch('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: email.trim(),
+          phone: phone.trim(),
+          location: location.trim(),
+          paymentMethod: paymentMethod.label,
+          subtotal,
+          shipping,
+          total,
+          items: items.map((item) => ({
+            id: item.id,
+            title: item.title,
+            size: item.size,
+            quantity: item.quantity,
+            price: item.price,
+          })),
+        }),
+      })
+
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to place order')
+      }
+
+      setPlacedOrderId(data.order?.orderId ?? null)
+      setOrderPlaced(true)
+      clearCart()
+      setShowPaymentMethods(false)
+      setSelectedPayment(null)
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : 'Failed to place order')
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -193,7 +237,12 @@ export default function CartPage() {
 
         {orderPlaced && (
           <div className="mb-8 rounded-2xl border border-green-700/40 bg-green-100 px-6 py-4 text-green-900 font-medium">
-            Order placed successfully. We&apos;ll contact you shortly to confirm delivery.
+            <p>Order placed successfully. We&apos;ll contact you shortly to confirm delivery.</p>
+            {placedOrderId && (
+              <p className="mt-2 text-sm font-semibold tracking-wide">
+                Order ID: <span className="font-mono">{placedOrderId}</span>
+              </p>
+            )}
           </div>
         )}
 
@@ -402,9 +451,10 @@ export default function CartPage() {
                   <button
                     type="button"
                     onClick={handleConfirmPayment}
-                    className="w-full py-4 mt-2 font-bebas text-2xl tracking-wider rounded-xl bg-black text-white hover:bg-[var(--color-accent)] hover:text-black hover:scale-[1.02] transition-all cursor-pointer"
+                    disabled={isSubmitting}
+                    className="w-full py-4 mt-2 font-bebas text-2xl tracking-wider rounded-xl bg-black text-white hover:bg-[var(--color-accent)] hover:text-black hover:scale-[1.02] transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:scale-100"
                   >
-                    CONFIRM ORDER
+                    {isSubmitting ? 'PLACING ORDER...' : 'CONFIRM ORDER'}
                   </button>
                   <button
                     type="button"
