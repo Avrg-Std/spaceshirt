@@ -192,7 +192,7 @@ export default function CartPage() {
         </div>
 
         {orderPlaced && (
-          <div className="mb-8 rounded-2xl border border-green-500/30 bg-green-500/10 px-6 py-4 text-green-200">
+          <div className="mb-8 rounded-2xl border border-green-700/40 bg-green-100 px-6 py-4 text-green-900 font-medium">
             Order placed successfully. We&apos;ll contact you shortly to confirm delivery.
           </div>
         )}
@@ -202,9 +202,9 @@ export default function CartPage() {
           <div className="flex-1">
             <div className="space-y-6">
               {items.length === 0 ? (
-                <div className="cart-item-anim p-8 rounded-3xl bg-white/5 border border-white/10 glass shadow-lg text-center">
-                  <p className="text-gray-300 mb-4">Your cart is empty.</p>
-                  <Link href="/products" className="underline text-white">
+                <div className="cart-item-anim p-8 rounded-3xl bg-white border border-black/10 shadow-lg text-center">
+                  <p className="text-neutral-700 mb-4">Your cart is empty.</p>
+                  <Link href="/products" className="underline text-black font-medium hover:text-neutral-600">
                     Browse Products
                   </Link>
                 </div>
@@ -212,33 +212,33 @@ export default function CartPage() {
                 items.map((item) => (
                   <div
                     key={`${item.id}-${item.size}`}
-                    className="cart-item-anim flex gap-6 p-4 rounded-3xl bg-white/5 border border-white/10 glass shadow-lg"
+                    className="cart-item-anim flex gap-6 p-4 rounded-3xl bg-white border border-black/10 shadow-lg"
                   >
-                    <div className="relative w-28 h-36 md:w-36 md:h-48 rounded-2xl overflow-hidden bg-white/10 flex-shrink-0">
+                    <div className="relative w-28 h-36 md:w-36 md:h-48 rounded-2xl overflow-hidden bg-neutral-100 flex-shrink-0">
                       <Image src={item.image} alt={item.title} fill className="object-cover" />
                     </div>
 
                     <div className="flex flex-col justify-between flex-grow py-2">
                       <div className="flex justify-between items-start">
                         <div>
-                          <h3 className="font-bebas text-2xl tracking-wide">{item.title}</h3>
-                          <p className="text-sm text-gray-400 mt-1">Size: {item.size}</p>
+                          <h3 className="font-bebas text-2xl tracking-wide text-black">{item.title}</h3>
+                          <p className="text-sm text-neutral-600 mt-1">Size: {item.size}</p>
                         </div>
-                        <p className="font-bebas text-2xl">${item.price.toFixed(2)}</p>
+                        <p className="font-bebas text-2xl text-black">${item.price.toFixed(2)}</p>
                       </div>
 
                       <div className="flex justify-between items-end">
-                        <div className="flex items-center gap-4 bg-black/40 rounded-full px-4 py-2 border border-white/10">
+                        <div className="flex items-center gap-4 bg-neutral-100 rounded-full px-4 py-2 border border-black/10">
                           <button
                             onClick={() => updateQuantity(item.id, item.size, item.quantity - 1)}
-                            className="text-gray-400 hover:text-white transition-colors cursor-pointer"
+                            className="text-neutral-600 hover:text-black transition-colors cursor-pointer"
                           >
                             <Minus size={16} />
                           </button>
-                          <span className="font-bebas text-lg w-4 text-center">{item.quantity}</span>
+                          <span className="font-bebas text-lg w-4 text-center text-black">{item.quantity}</span>
                           <button
                             onClick={() => updateQuantity(item.id, item.size, item.quantity + 1)}
-                            className="text-gray-400 hover:text-white transition-colors cursor-pointer"
+                            className="text-neutral-600 hover:text-black transition-colors cursor-pointer"
                           >
                             <Plus size={16} />
                           </button>
@@ -246,7 +246,7 @@ export default function CartPage() {
 
                         <button
                           onClick={() => removeItem(item.id, item.size)}
-                          className="text-gray-500 hover:text-red-400 transition-colors p-2 cursor-pointer"
+                          className="text-neutral-500 hover:text-red-600 transition-colors p-2 cursor-pointer"
                         >
                           <Trash2 size={20} />
                         </button>
@@ -260,12 +260,12 @@ export default function CartPage() {
 
           {/* Right Column - Checkout Form */}
           <div className="w-full lg:w-[450px] checkout-panel-anim">
-            <div className="p-8 rounded-[var(--radius-3xl)] bg-white/5 border border-white/10 glass shadow-2xl sticky top-32">
-              <h2 className="font-bebas text-3xl tracking-wide mb-8 border-b border-white/10 pb-4">
+            <div className="p-8 rounded-[var(--radius-3xl)] bg-white border border-black/10 shadow-2xl sticky top-32">
+              <h2 className="font-bebas text-3xl tracking-wide mb-8 border-b border-black/10 pb-4 text-black">
                 ORDER SUMMARY
               </h2>
 
-              <div className="space-y-4 mb-8 text-lg font-bebas text-gray-300 tracking-wide">
+              <div className="space-y-4 mb-8 text-lg font-bebas text-neutral-700 tracking-wide">
                 <div className="flex justify-between">
                   <span>SUBTOTAL</span>
                   <span>${subtotal.toFixed(2)}</span>
@@ -274,7 +274,7 @@ export default function CartPage() {
                   <span>SHIPPING</span>
                   <span>${items.length > 0 ? shipping.toFixed(2) : '0.00'}</span>
                 </div>
-                <div className="flex justify-between text-2xl text-[var(--color-foreground)] border-t border-white/10 pt-4 mt-4">
+                <div className="flex justify-between text-2xl text-black border-t border-black/10 pt-4 mt-4">
                   <span>TOTAL</span>
                   <span>${total.toFixed(2)}</span>
                 </div>
@@ -282,7 +282,7 @@ export default function CartPage() {
 
               <div className="space-y-4 mb-8">
                 <div>
-                  <label className="block text-xs font-bold text-gray-400 tracking-wider mb-2 uppercase">
+                  <label className="block text-xs font-bold text-neutral-600 tracking-wider mb-2 uppercase">
                     Email
                   </label>
                   <input
@@ -290,12 +290,12 @@ export default function CartPage() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="your@email.com"
-                    className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-[var(--color-accent)] transition-colors"
+                    className="w-full bg-neutral-100 border border-black/10 rounded-xl px-4 py-3 text-black placeholder:text-neutral-400 focus:outline-none focus:border-[var(--color-accent)] transition-colors"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-gray-400 tracking-wider mb-2 uppercase">
+                  <label className="block text-xs font-bold text-neutral-600 tracking-wider mb-2 uppercase">
                     Phone Number
                   </label>
                   <input
@@ -303,50 +303,50 @@ export default function CartPage() {
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
                     placeholder="+961 XX XXX XXX"
-                    className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-[var(--color-accent)] transition-colors"
+                    className="w-full bg-neutral-100 border border-black/10 rounded-xl px-4 py-3 text-black placeholder:text-neutral-400 focus:outline-none focus:border-[var(--color-accent)] transition-colors"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-gray-400 tracking-wider mb-2 uppercase">
+                  <label className="block text-xs font-bold text-neutral-600 tracking-wider mb-2 uppercase">
                     Location
                   </label>
                   <div className="relative">
-                    <div className="w-full min-h-[52px] bg-black/40 border border-white/10 rounded-xl pl-12 pr-12 py-3 text-white flex items-center">
+                    <div className="w-full min-h-[52px] bg-neutral-100 border border-black/10 rounded-xl pl-12 pr-20 py-3 text-black flex items-center">
                       {locationStatus === 'loading' && (
-                        <span className="text-gray-400 text-sm flex items-center gap-2">
+                        <span className="text-neutral-600 text-sm flex items-center gap-2">
                           <Loader2 size={16} className="animate-spin" />
                           Detecting your location...
                         </span>
                       )}
                       {locationStatus === 'ready' && (
-                        <span className="text-sm leading-snug">{location}</span>
+                        <span className="text-sm leading-snug text-black">{location}</span>
                       )}
                       {locationStatus === 'error' && (
-                        <span className="text-red-300 text-sm">{locationError}</span>
+                        <span className="text-red-700 text-sm">{locationError}</span>
                       )}
                       {locationStatus === 'idle' && (
-                        <span className="text-gray-500 text-sm">Location will appear here</span>
+                        <span className="text-neutral-500 text-sm">Location will appear here</span>
                       )}
                     </div>
-                    <MapPin size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" />
+                    <MapPin size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-500" />
                     <button
                       type="button"
                       onClick={detectLocation}
                       disabled={locationStatus === 'loading'}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-xs uppercase tracking-wider text-gray-400 hover:text-white transition-colors cursor-pointer disabled:opacity-50"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-xs uppercase tracking-wider text-neutral-700 hover:text-black font-semibold transition-colors cursor-pointer disabled:opacity-50"
                     >
                       Refresh
                     </button>
                   </div>
-                  <p className="mt-2 text-[11px] text-gray-500">
+                  <p className="mt-2 text-[11px] text-neutral-600">
                     Detected automatically from your device — no typing needed.
                   </p>
                 </div>
               </div>
 
               {formError && (
-                <p className="mb-4 text-sm text-red-300">{formError}</p>
+                <p className="mb-4 text-sm text-red-700 font-medium">{formError}</p>
               )}
 
               {!showPaymentMethods ? (
@@ -354,17 +354,17 @@ export default function CartPage() {
                   type="button"
                   disabled={items.length === 0}
                   onClick={handlePayNow}
-                  className={`w-full py-4 font-bebas text-2xl tracking-wider rounded-xl shadow-[0_8px_30px_rgb(255,255,255,0.1)] transition-all ${
+                  className={`w-full py-4 font-bebas text-2xl tracking-wider rounded-xl shadow-md transition-all ${
                     items.length === 0
-                      ? 'bg-gray-500 text-gray-300 cursor-not-allowed'
-                      : 'bg-[var(--color-foreground)] text-[var(--background)] hover:bg-[var(--color-accent)] hover:text-black hover:scale-[1.02] cursor-pointer'
+                      ? 'bg-neutral-300 text-neutral-500 cursor-not-allowed'
+                      : 'bg-black text-white hover:bg-[var(--color-accent)] hover:text-black hover:scale-[1.02] cursor-pointer'
                   }`}
                 >
                   PAY NOW
                 </button>
               ) : (
                 <div className="space-y-3">
-                  <p className="text-xs font-bold text-gray-400 tracking-wider uppercase mb-1">
+                  <p className="text-xs font-bold text-neutral-700 tracking-wider uppercase mb-1">
                     Choose Payment Method
                   </p>
                   {PAYMENT_METHODS.map((method) => {
@@ -377,23 +377,23 @@ export default function CartPage() {
                         onClick={() => setSelectedPayment(method.id)}
                         className={`payment-method-anim w-full flex items-start gap-3 p-4 rounded-xl border transition-all text-left cursor-pointer ${
                           isSelected
-                            ? 'border-[var(--color-accent)] bg-[var(--color-accent)]/10'
-                            : 'border-white/10 bg-black/40 hover:border-white/30'
+                            ? 'border-black bg-[var(--color-accent)]/25 shadow-sm'
+                            : 'border-black/15 bg-neutral-50 hover:border-black/40 hover:bg-neutral-100'
                         }`}
                       >
                         <span
-                          className={`mt-0.5 w-5 h-5 rounded-full border flex items-center justify-center flex-shrink-0 ${
-                            isSelected ? 'border-[var(--color-accent)] bg-[var(--color-accent)]' : 'border-white/30'
+                          className={`mt-0.5 w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+                            isSelected ? 'border-black bg-[var(--color-accent)]' : 'border-neutral-400'
                           }`}
                         >
-                          {isSelected && <Check size={12} className="text-black" />}
+                          {isSelected && <Check size={12} className="text-black" strokeWidth={3} />}
                         </span>
-                        <Icon size={20} className="mt-0.5 text-gray-300 flex-shrink-0" />
+                        <Icon size={20} className="mt-0.5 text-neutral-800 flex-shrink-0" />
                         <span>
-                          <span className="block font-bebas text-lg tracking-wide text-white">
+                          <span className="block font-bebas text-lg tracking-wide text-black">
                             {method.label}
                           </span>
-                          <span className="block text-xs text-gray-400 mt-0.5">{method.description}</span>
+                          <span className="block text-xs text-neutral-600 mt-0.5">{method.description}</span>
                         </span>
                       </button>
                     )
@@ -402,7 +402,7 @@ export default function CartPage() {
                   <button
                     type="button"
                     onClick={handleConfirmPayment}
-                    className="w-full py-4 mt-2 font-bebas text-2xl tracking-wider rounded-xl bg-[var(--color-foreground)] text-[var(--background)] hover:bg-[var(--color-accent)] hover:text-black hover:scale-[1.02] transition-all cursor-pointer"
+                    className="w-full py-4 mt-2 font-bebas text-2xl tracking-wider rounded-xl bg-black text-white hover:bg-[var(--color-accent)] hover:text-black hover:scale-[1.02] transition-all cursor-pointer"
                   >
                     CONFIRM ORDER
                   </button>
@@ -413,15 +413,15 @@ export default function CartPage() {
                       setSelectedPayment(null)
                       setFormError('')
                     }}
-                    className="w-full py-2 text-xs uppercase tracking-wider text-gray-400 hover:text-white transition-colors cursor-pointer"
+                    className="w-full py-2 text-xs uppercase tracking-wider text-neutral-600 hover:text-black font-semibold transition-colors cursor-pointer"
                   >
                     Back
                   </button>
                 </div>
               )}
 
-              <div className="mt-6 text-center text-xs text-gray-500 flex items-center justify-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-green-500 opacity-70"></span>
+              <div className="mt-6 text-center text-xs text-neutral-600 flex items-center justify-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-green-600"></span>
                 Secure Encrypted Checkout
               </div>
             </div>
