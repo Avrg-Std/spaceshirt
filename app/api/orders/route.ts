@@ -77,7 +77,7 @@ export async function POST(request: Request) {
       typeof body.subtotal === "number"
         ? body.subtotal
         : items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-    const shipping = typeof body.shipping === "number" ? body.shipping : 15;
+    const shipping = typeof body.shipping === "number" ? body.shipping : 0;
     const total = typeof body.total === "number" ? body.total : subtotal + shipping;
 
     if (paymentMethod === "Whish") {

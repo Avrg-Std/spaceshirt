@@ -42,7 +42,7 @@ function CartPageContent() {
   const searchParams = useSearchParams()
   const containerRef = useRef(null)
   const { items, subtotal, updateQuantity, removeItem, clearCart } = useCart()
-  const shipping = 15.0
+  const shipping = 0
   const total = items.length > 0 ? subtotal + shipping : 0
 
   const [email, setEmail] = useState('')
@@ -452,9 +452,11 @@ function CartPageContent() {
                   <span>SUBTOTAL</span>
                   <span>${subtotal.toFixed(2)}</span>
                 </div>
-                <div className="flex justify-between">
+                <div className="flex justify-between gap-4">
                   <span>SHIPPING</span>
-                  <span>${items.length > 0 ? shipping.toFixed(2) : '0.00'}</span>
+                  <span className="text-right text-base font-medium normal-case tracking-normal text-neutral-600">
+                    Paid separately to delivery agency
+                  </span>
                 </div>
                 <div className="flex justify-between text-2xl text-black border-t border-black/10 pt-4 mt-4">
                   <span>TOTAL</span>
