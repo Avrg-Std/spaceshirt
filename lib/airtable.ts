@@ -33,6 +33,39 @@ export type Product = {
   stock: number | null;
   sizes: string[];
   rating: number | null;
+  featured: boolean;
+  featuredOrder: number | null;
+  showOnNewest: boolean;
+  newestOrder: number | null;
+};
+
+export type ProductInput = {
+  title: string;
+  price: number;
+  description: string;
+  category: string;
+  image?: string;
+  stock?: number | null;
+  sizes?: string[];
+  rating?: number | null;
+  featured?: boolean;
+  featuredOrder?: number | null;
+  showOnNewest?: boolean;
+  newestOrder?: number | null;
+};
+
+export type OrderStatus =
+  | "Pending"
+  | "Awaiting Payment"
+  | "Confirmed"
+  | "Shipped"
+  | "Cancelled";
+
+export type OrderLineItem = {
+  title: string;
+  size: string;
+  quantity: number;
+  price: number;
 };
 
 function requiredEnv(name: string): string {
@@ -121,6 +154,22 @@ function stringArray(value: unknown): string[] {
   return [];
 }
 
+function toBoolean(value: unknown): boolean {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value !== 0;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    return normalized === "true" || normalized === "yes" || normalized === "1";
+  }
+  return false;
+}
+
+function getProductsTablePath(): string {
+  const baseId = requiredEnv("AIRTABLE_BASE_ID");
+  const tableName = requiredEnv("AIRTABLE_TABLE_NAME");
+  return `${baseId}/${encodeURIComponent(tableName)}`;
+}
+
 function getField(record: AirtableRecord, keys: string[]): unknown {
   for (const key of keys) {
     if (key in record.fields) return record.fields[key];
@@ -155,6 +204,10 @@ function mapRecordToProduct(record: AirtableRecord): Product {
     stock,
     sizes: sizes.length ? sizes : ["S", "M", "L", "XL"],
     rating,
+    featured: toBoolean(getField(record, ["Featured"])),
+    featuredOrder: toNumber(getField(record, ["Featured Order"])),
+    showOnNewest: toBoolean(getField(record, ["Show on Newest"])),
+    newestOrder: toNumber(getField(record, ["Newest Order"])),
   };
 }
 
@@ -174,6 +227,88 @@ async function fetchAirtable(path: string): Promise<AirtableListResponse> {
   }
 
   return (await response.json()) as AirtableListResponse;
+}
+
+async function deleteAirtableRecord(path: string, recordId: string): Promise<void> {
+  const token = requiredEnv("AIRTABLE_TOKEN");
+  const query = new URLSearchParams();
+  query.set("records[]", recordId);
+
+  const response = await fetch(`${AIRTABLE_API_BASE}/${path}?${query.toString()}`, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.text();
+    throw new Error(`Airtable request failed (${response.status}): ${errorBody}`);
+  }
+}
+
+async function fetchAirtableRecord(path: string): Promise<AirtableRecord | null> {
+  const token = requiredEnv("AIRTABLE_TOKEN");
+
+  const response = await fetch(`${AIRTABLE_API_BASE}/${path}`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    cache: "no-store",
+  });
+
+  if (response.status === 404) return null;
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Airtable request failed (${response.status}): ${body}`);
+  }
+
+  return (await response.json()) as AirtableRecord;
+}
+
+function productInputToFields(input: ProductInput): Record<string, unknown> {
+  const fields: Record<string, unknown> = {
+    "Product Name": input.title,
+    Price: input.price,
+    Description: input.description,
+    Category: input.category,
+  };
+
+  if (input.stock !== undefined) {
+    fields.Stock = input.stock;
+  }
+
+  if (input.sizes !== undefined) {
+    fields.Sizes = input.sizes.join(", ");
+  }
+
+  if (input.rating !== undefined && input.rating !== null) {
+    fields.Rating = input.rating;
+  }
+
+  if (input.image?.trim()) {
+    fields.images = [{ url: input.image.trim() }];
+  }
+
+  if (input.featured !== undefined) {
+    fields.Featured = input.featured;
+  }
+
+  if (input.featuredOrder !== undefined) {
+    fields["Featured Order"] = input.featuredOrder;
+  }
+
+  if (input.showOnNewest !== undefined) {
+    fields["Show on Newest"] = input.showOnNewest;
+  }
+
+  if (input.newestOrder !== undefined) {
+    fields["Newest Order"] = input.newestOrder;
+  }
+
+  return fields;
 }
 
 async function mutateAirtable(
@@ -234,6 +369,18 @@ export type CustomerOrder = {
   shipping: number;
   total: number;
   whishExternalId?: string;
+  items: OrderLineItem[];
+  itemsText: string;
+  orderDate: string | null;
+  productIds: string[];
+};
+
+export type CustomerSummary = {
+  email: string;
+  phone: string;
+  orderCount: number;
+  totalSpent: number;
+  lastOrderDate: string | null;
 };
 
 function getOrdersTablePath(): string {
@@ -243,10 +390,46 @@ function getOrdersTablePath(): string {
   return `${baseId}/${encodeURIComponent(tableName)}`;
 }
 
+function parseOrderItems(itemsText: string): OrderLineItem[] {
+  if (!itemsText.trim()) return [];
+
+  return itemsText
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const match = line.match(
+        /^(.*?)\s\|\sSize:\s(.*?)\s\|\sQty:\s(\d+)\s\|\s\$([0-9.]+)$/
+      );
+
+      if (!match) {
+        return {
+          title: line,
+          size: "-",
+          quantity: 1,
+          price: 0,
+        };
+      }
+
+      return {
+        title: match[1].trim(),
+        size: match[2].trim(),
+        quantity: Number(match[3]),
+        price: Number(match[4]),
+      };
+    });
+}
+
 function mapRecordToCustomerOrder(record: AirtableRecord): CustomerOrder {
   const paymentMethod = firstString(record.fields["Payment Method"]) as
     | PaymentMethodLabel
     | null;
+  const itemsText = firstString(record.fields.Items) ?? "";
+  const productIds = Array.isArray(record.fields.Products)
+    ? record.fields.Products.filter(
+        (item): item is string => typeof item === "string" && isAirtableRecordId(item)
+      )
+    : [];
 
   return {
     id: record.id,
@@ -260,6 +443,10 @@ function mapRecordToCustomerOrder(record: AirtableRecord): CustomerOrder {
     shipping: toNumber(record.fields.Shipping) ?? 0,
     total: toNumber(record.fields.Total) ?? 0,
     whishExternalId: firstString(record.fields["Whish External ID"]) ?? undefined,
+    itemsText,
+    items: parseOrderItems(itemsText),
+    orderDate: firstString(record.fields["Order Date"]),
+    productIds,
   };
 }
 
@@ -343,6 +530,15 @@ export async function createCustomerOrder(
     shipping: input.shipping,
     total: input.total,
     whishExternalId: input.whishExternalId,
+    itemsText: formatOrderItems(input.items),
+    items: input.items.map((item) => ({
+      title: item.title,
+      size: item.size,
+      quantity: item.quantity,
+      price: item.price,
+    })),
+    orderDate: new Date().toISOString(),
+    productIds: productRecordIds,
   };
 }
 
@@ -381,9 +577,7 @@ export async function updateCustomerOrderStatusByWhishExternalId(
 }
 
 export async function getProducts(): Promise<Product[]> {
-  const baseId = requiredEnv("AIRTABLE_BASE_ID");
-  const tableName = requiredEnv("AIRTABLE_TABLE_NAME");
-  const encodedTable = encodeURIComponent(tableName);
+  const tablePath = getProductsTablePath();
 
   const products: Product[] = [];
   let offset: string | undefined;
@@ -393,7 +587,7 @@ export async function getProducts(): Promise<Product[]> {
     query.set("pageSize", "100");
     if (offset) query.set("offset", offset);
 
-    const data = await fetchAirtable(`${baseId}/${encodedTable}?${query.toString()}`);
+    const data = await fetchAirtable(`${tablePath}?${query.toString()}`);
     products.push(...data.records.map(mapRecordToProduct));
     offset = data.offset;
   } while (offset);
@@ -401,7 +595,196 @@ export async function getProducts(): Promise<Product[]> {
   return products;
 }
 
+export async function getProductByRecordId(id: string): Promise<Product | null> {
+  const record = await fetchAirtableRecord(`${getProductsTablePath()}/${id}`);
+  return record ? mapRecordToProduct(record) : null;
+}
+
 export async function getProductById(id: string): Promise<Product | null> {
+  if (isAirtableRecordId(id)) {
+    const product = await getProductByRecordId(id);
+    if (product) return product;
+  }
+
   const products = await getProducts();
   return products.find((product) => product.id === id) ?? null;
+}
+
+export async function createProduct(input: ProductInput): Promise<Product> {
+  const data = await mutateAirtable(getProductsTablePath(), "POST", {
+    records: [{ fields: productInputToFields(input) }],
+    typecast: true,
+  });
+
+  const record = data.records[0];
+  if (!record) {
+    throw new Error("Airtable did not return a created product record");
+  }
+
+  return mapRecordToProduct(record);
+}
+
+export async function updateProduct(
+  id: string,
+  input: Partial<ProductInput>
+): Promise<Product | null> {
+  const existing = await getProductByRecordId(id);
+  if (!existing) return null;
+
+  const merged: ProductInput = {
+    title: input.title ?? existing.title,
+    price: input.price ?? existing.price,
+    description: input.description ?? existing.description,
+    category: input.category ?? existing.category,
+    image: input.image ?? existing.image,
+    stock: input.stock !== undefined ? input.stock : existing.stock,
+    sizes: input.sizes ?? existing.sizes,
+    rating: input.rating !== undefined ? input.rating : existing.rating,
+    featured: input.featured !== undefined ? input.featured : existing.featured,
+    featuredOrder:
+      input.featuredOrder !== undefined ? input.featuredOrder : existing.featuredOrder,
+    showOnNewest:
+      input.showOnNewest !== undefined ? input.showOnNewest : existing.showOnNewest,
+    newestOrder:
+      input.newestOrder !== undefined ? input.newestOrder : existing.newestOrder,
+  };
+
+  const data = await mutateAirtable(getProductsTablePath(), "PATCH", {
+    records: [{ id, fields: productInputToFields(merged) }],
+    typecast: true,
+  });
+
+  const record = data.records[0];
+  return record ? mapRecordToProduct(record) : existing;
+}
+
+export async function deleteProduct(id: string): Promise<boolean> {
+  const existing = await getProductByRecordId(id);
+  if (!existing) return false;
+
+  await deleteAirtableRecord(getProductsTablePath(), id);
+  return true;
+}
+
+export async function getFeaturedProducts(limit = 4): Promise<Product[]> {
+  const products = await getProducts();
+  return products
+    .filter((product) => product.featured)
+    .sort((a, b) => (a.featuredOrder ?? 999) - (b.featuredOrder ?? 999))
+    .slice(0, limit);
+}
+
+export async function getNewestProducts(limit = 3): Promise<Product[]> {
+  const products = await getProducts();
+  return products
+    .filter((product) => product.showOnNewest)
+    .sort((a, b) => (a.newestOrder ?? 999) - (b.newestOrder ?? 999))
+    .slice(0, limit);
+}
+
+export async function getOrders(options?: { status?: string }): Promise<CustomerOrder[]> {
+  const tablePath = getOrdersTablePath();
+  const orders: CustomerOrder[] = [];
+  let offset: string | undefined;
+
+  do {
+    const query = new URLSearchParams();
+    query.set("pageSize", "100");
+    if (options?.status) {
+      query.set(
+        "filterByFormula",
+        `{Status} = "${options.status.replace(/"/g, '\\"')}"`
+      );
+    }
+    if (offset) query.set("offset", offset);
+
+    const data = await fetchAirtable(`${tablePath}?${query.toString()}`);
+    orders.push(...data.records.map(mapRecordToCustomerOrder));
+    offset = data.offset;
+  } while (offset);
+
+  return orders.sort((a, b) => {
+    const aTime = a.orderDate ? Date.parse(a.orderDate) : 0;
+    const bTime = b.orderDate ? Date.parse(b.orderDate) : 0;
+    return bTime - aTime;
+  });
+}
+
+export async function getOrderById(recordId: string): Promise<CustomerOrder | null> {
+  const record = await fetchAirtableRecord(`${getOrdersTablePath()}/${recordId}`);
+  return record ? mapRecordToCustomerOrder(record) : null;
+}
+
+export async function getOrderByOrderId(orderId: string): Promise<CustomerOrder | null> {
+  const query = new URLSearchParams();
+  query.set("pageSize", "1");
+  query.set("filterByFormula", `{Order ID} = "${orderId.replace(/"/g, '\\"')}"`);
+
+  const data = await fetchAirtable(`${getOrdersTablePath()}?${query.toString()}`);
+  const record = data.records[0];
+  return record ? mapRecordToCustomerOrder(record) : null;
+}
+
+export async function updateOrderStatus(
+  recordId: string,
+  status: OrderStatus
+): Promise<CustomerOrder | null> {
+  const existing = await getOrderById(recordId);
+  if (!existing) return null;
+
+  const data = await mutateAirtable(getOrdersTablePath(), "PATCH", {
+    records: [{ id: recordId, fields: { Status: status } }],
+    typecast: true,
+  });
+
+  const record = data.records[0];
+  return record ? mapRecordToCustomerOrder(record) : existing;
+}
+
+export async function getCustomers(): Promise<CustomerSummary[]> {
+  const orders = await getOrders();
+  const grouped = new Map<string, CustomerSummary>();
+
+  for (const order of orders) {
+    const key = order.email.trim().toLowerCase() || order.phone.trim();
+    if (!key) continue;
+
+    const existing = grouped.get(key);
+    const orderDate = order.orderDate;
+
+    if (!existing) {
+      grouped.set(key, {
+        email: order.email,
+        phone: order.phone,
+        orderCount: 1,
+        totalSpent: order.total,
+        lastOrderDate: orderDate,
+      });
+      continue;
+    }
+
+    existing.orderCount += 1;
+    existing.totalSpent += order.total;
+    if (
+      orderDate &&
+      (!existing.lastOrderDate || Date.parse(orderDate) > Date.parse(existing.lastOrderDate))
+    ) {
+      existing.lastOrderDate = orderDate;
+    }
+    if (!existing.phone && order.phone) {
+      existing.phone = order.phone;
+    }
+  }
+
+  return Array.from(grouped.values()).sort((a, b) => {
+    const aTime = a.lastOrderDate ? Date.parse(a.lastOrderDate) : 0;
+    const bTime = b.lastOrderDate ? Date.parse(b.lastOrderDate) : 0;
+    return bTime - aTime;
+  });
+}
+
+export async function getCustomerOrders(email: string): Promise<CustomerOrder[]> {
+  const normalizedEmail = email.trim().toLowerCase();
+  const orders = await getOrders();
+  return orders.filter((order) => order.email.trim().toLowerCase() === normalizedEmail);
 }

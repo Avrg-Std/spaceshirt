@@ -1,20 +1,29 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Image from 'next/image'
 import gsap from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import { ShoppingCart } from 'lucide-react'
 import { addToCart } from '@/lib/cart'
+import type { Product } from '@/lib/airtable'
 
 gsap.registerPlugin(ScrollTrigger)
 
-const newestProducts = [
+type DisplayProduct = {
+  id: string
+  title: string
+  image: string
+  price: number
+  aspect: string
+  col: string
+  offset: string
+  labelPos: string
+  cartPos: string
+}
+
+const layoutByIndex = [
   {
-    id: 'newest-belt-bag',
-    title: 'BELT BAG',
-    image: '/images/image 1.jpeg',
-    price: 45,
     aspect: 'aspect-[4/3]',
     col: 'md:col-span-5',
     offset: '',
@@ -22,10 +31,6 @@ const newestProducts = [
     cartPos: 'top-6 left-6',
   },
   {
-    id: 'newest-hoodie',
-    title: 'HOODIE',
-    image: '/images/image 2.jpeg',
-    price: 95,
     aspect: 'aspect-[3/4]',
     col: 'md:col-span-4',
     offset: 'mt-12 md:mt-0',
@@ -33,10 +38,6 @@ const newestProducts = [
     cartPos: 'top-6 left-6',
   },
   {
-    id: 'newest-tote-bag',
-    title: 'TOTE BAG',
-    image: '/images/image 8.jpeg',
-    price: 35,
     aspect: 'aspect-[3/4]',
     col: 'md:col-span-3',
     offset: 'mt-24 md:mt-0',
@@ -45,8 +46,59 @@ const newestProducts = [
   },
 ] as const
 
+const fallbackProducts: DisplayProduct[] = [
+  {
+    id: 'newest-belt-bag',
+    title: 'BELT BAG',
+    image: '/images/image 1.jpeg',
+    price: 45,
+    ...layoutByIndex[0],
+  },
+  {
+    id: 'newest-hoodie',
+    title: 'HOODIE',
+    image: '/images/image 2.jpeg',
+    price: 95,
+    ...layoutByIndex[1],
+  },
+  {
+    id: 'newest-tote-bag',
+    title: 'TOTE BAG',
+    image: '/images/image 8.jpeg',
+    price: 35,
+    ...layoutByIndex[2],
+  },
+]
+
+function toDisplayProducts(products: Product[]): DisplayProduct[] {
+  return products.slice(0, 3).map((product, index) => ({
+    id: product.id,
+    title: product.title,
+    image: product.image,
+    price: product.price,
+    ...layoutByIndex[index],
+  }))
+}
+
 export default function NewestProducts() {
   const containerRef = useRef(null)
+  const [products, setProducts] = useState<DisplayProduct[]>(fallbackProducts)
+
+  useEffect(() => {
+    async function loadNewestProducts() {
+      try {
+        const response = await fetch('/api/products/newest')
+        if (!response.ok) return
+        const data = (await response.json()) as { products: Product[] }
+        if (!data.products.length) return
+        setProducts(toDisplayProducts(data.products))
+      } catch {
+        // Keep fallback products when API is unavailable.
+      }
+    }
+
+    loadNewestProducts()
+  }, [])
 
   useEffect(() => {
     const ctx = gsap.context(() => {
@@ -62,11 +114,11 @@ export default function NewestProducts() {
       })
     }, containerRef)
     return () => ctx.revert()
-  }, [])
+  }, [products])
 
   const handleAddToCart = (
     e: React.MouseEvent<HTMLButtonElement>,
-    product: (typeof newestProducts)[number],
+    product: DisplayProduct,
     imageEl: HTMLElement | null
   ) => {
     e.preventDefault()
@@ -123,7 +175,7 @@ export default function NewestProducts() {
       </h2>
 
       <div className="grid grid-cols-1 md:grid-cols-12 gap-8">
-        {newestProducts.map((product) => (
+        {products.map((product) => (
           <div key={product.id} className={`${product.col} newest-card ${product.offset}`}>
             <div
               className={`relative w-full ${product.aspect} rounded-[var(--radius-3xl)] overflow-hidden bg-gray-200 group`}
