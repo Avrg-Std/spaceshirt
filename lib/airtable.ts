@@ -187,7 +187,10 @@ function mapRecordToProduct(record: AirtableRecord): Product {
     "No description available.";
   const category =
     firstString(getField(record, ["Category", "Type"])) ?? "Uncategorized";
-  const image = imageFromField(getField(record, ["images", "Images", "Image", "Photo"])) ?? "/images/image 1.jpeg";
+  const image =
+    imageFromField(
+      getField(record, ["Images", "Image 1", "Image 2", "images", "Image", "Photo"])
+    ) ?? "/images/image 1.jpeg";
   const stock = toNumber(getField(record, ["Stock", "Quantity", "Inventory"]));
   const rating = toNumber(getField(record, ["Rating"]));
 
@@ -268,7 +271,10 @@ async function fetchAirtableRecord(path: string): Promise<AirtableRecord | null>
   return (await response.json()) as AirtableRecord;
 }
 
-function productInputToFields(input: ProductInput): Record<string, unknown> {
+function productInputToFields(
+  input: ProductInput,
+  options?: { includeCuration?: boolean }
+): Record<string, unknown> {
   const fields: Record<string, unknown> = {
     "Product Name": input.title,
     Price: input.price,
@@ -281,31 +287,35 @@ function productInputToFields(input: ProductInput): Record<string, unknown> {
   }
 
   if (input.sizes !== undefined) {
-    fields.Sizes = input.sizes.join(", ");
+    // Airtable "Sizes" is a multipleSelects field — write an array of choice names.
+    fields.Sizes = input.sizes;
   }
 
   if (input.rating !== undefined && input.rating !== null) {
     fields.Rating = input.rating;
   }
 
-  if (input.image?.trim()) {
-    fields.images = [{ url: input.image.trim() }];
+  // Airtable "Images" is singleLineText (URL), not an attachment field.
+  if (input.image !== undefined) {
+    fields.Images = input.image.trim();
   }
 
-  if (input.featured !== undefined) {
-    fields.Featured = input.featured;
-  }
+  if (options?.includeCuration) {
+    if (input.featured !== undefined) {
+      fields.Featured = input.featured;
+    }
 
-  if (input.featuredOrder !== undefined) {
-    fields["Featured Order"] = input.featuredOrder;
-  }
+    if (input.featuredOrder !== undefined) {
+      fields["Featured Order"] = input.featuredOrder;
+    }
 
-  if (input.showOnNewest !== undefined) {
-    fields["Show on Newest"] = input.showOnNewest;
-  }
+    if (input.showOnNewest !== undefined) {
+      fields["Show on Newest"] = input.showOnNewest;
+    }
 
-  if (input.newestOrder !== undefined) {
-    fields["Newest Order"] = input.newestOrder;
+    if (input.newestOrder !== undefined) {
+      fields["Newest Order"] = input.newestOrder;
+    }
   }
 
   return fields;
@@ -611,8 +621,14 @@ export async function getProductById(id: string): Promise<Product | null> {
 }
 
 export async function createProduct(input: ProductInput): Promise<Product> {
+  const includeCuration =
+    input.featured !== undefined ||
+    input.featuredOrder !== undefined ||
+    input.showOnNewest !== undefined ||
+    input.newestOrder !== undefined;
+
   const data = await mutateAirtable(getProductsTablePath(), "POST", {
-    records: [{ fields: productInputToFields(input) }],
+    records: [{ fields: productInputToFields(input, { includeCuration }) }],
     typecast: true,
   });
 
@@ -631,12 +647,18 @@ export async function updateProduct(
   const existing = await getProductByRecordId(id);
   if (!existing) return null;
 
+  const includeCuration =
+    input.featured !== undefined ||
+    input.featuredOrder !== undefined ||
+    input.showOnNewest !== undefined ||
+    input.newestOrder !== undefined;
+
   const merged: ProductInput = {
     title: input.title ?? existing.title,
     price: input.price ?? existing.price,
     description: input.description ?? existing.description,
     category: input.category ?? existing.category,
-    image: input.image ?? existing.image,
+    image: input.image !== undefined ? input.image : existing.image,
     stock: input.stock !== undefined ? input.stock : existing.stock,
     sizes: input.sizes ?? existing.sizes,
     rating: input.rating !== undefined ? input.rating : existing.rating,
@@ -650,7 +672,7 @@ export async function updateProduct(
   };
 
   const data = await mutateAirtable(getProductsTablePath(), "PATCH", {
-    records: [{ id, fields: productInputToFields(merged) }],
+    records: [{ id, fields: productInputToFields(merged, { includeCuration }) }],
     typecast: true,
   });
 
