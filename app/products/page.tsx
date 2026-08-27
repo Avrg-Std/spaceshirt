@@ -13,6 +13,8 @@ type Product = {
   category: string
   image: string
   stock: number | null
+  sizes?: string[]
+  sizeStock?: Record<string, number>
 }
 
 export default function ProductsPage() {
@@ -152,6 +154,8 @@ export default function ProductsPage() {
                   title={p.title}
                   price={`$${p.price.toFixed(2)}`}
                   stock={p.stock}
+                  sizes={p.sizes}
+                  sizeStock={p.sizeStock}
                   className="opacity-90 hover:opacity-100"
                 />
               </div>

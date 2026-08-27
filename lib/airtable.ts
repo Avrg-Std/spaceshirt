@@ -1,5 +1,25 @@
 import "server-only";
 
+import {
+  normalizeSizeLabel,
+  PRODUCT_SIZE_OPTIONS,
+  sanitizeSizeStock,
+  sizesFromStock,
+  sumSizeStock,
+  type ProductSize,
+  type SizeStockMap,
+} from "@/lib/product-sizes";
+
+export {
+  normalizeSizeLabel,
+  PRODUCT_SIZE_OPTIONS,
+  sanitizeSizeStock,
+  sizesFromStock,
+  sumSizeStock,
+  type ProductSize,
+  type SizeStockMap,
+} from "@/lib/product-sizes";
+
 const AIRTABLE_API_BASE = "https://api.airtable.com/v0";
 const IMAGE_PATH_PATTERN = /\.(avif|bmp|gif|ico|jpe?g|png|svg|tiff?|webp)$/i;
 const TRUSTED_IMAGE_HOSTS = new Set([
@@ -32,6 +52,7 @@ export type Product = {
   image: string;
   stock: number | null;
   sizes: string[];
+  sizeStock: SizeStockMap;
   rating: number | null;
   featured: boolean;
   featuredOrder: number | null;
@@ -47,6 +68,7 @@ export type ProductInput = {
   image?: string;
   stock?: number | null;
   sizes?: string[];
+  sizeStock?: SizeStockMap;
   rating?: number | null;
   featured?: boolean;
   featuredOrder?: number | null;
@@ -62,10 +84,18 @@ export type OrderStatus =
   | "Cancelled";
 
 export type OrderLineItem = {
+  productId?: string;
   title: string;
   size: string;
   quantity: number;
   price: number;
+};
+
+type SizeInventoryRow = {
+  id: string;
+  productId: string;
+  size: string;
+  quantity: number;
 };
 
 function requiredEnv(name: string): string {
@@ -170,6 +200,13 @@ function getProductsTablePath(): string {
   return `${baseId}/${encodeURIComponent(tableName)}`;
 }
 
+function getSizeInventoryTablePath(): string {
+  const baseId = requiredEnv("AIRTABLE_BASE_ID");
+  const tableName =
+    process.env.AIRTABLE_SIZE_INVENTORY_TABLE_NAME?.trim() || "Size Inventory";
+  return `${baseId}/${encodeURIComponent(tableName)}`;
+}
+
 function getField(record: AirtableRecord, keys: string[]): unknown {
   for (const key of keys) {
     if (key in record.fields) return record.fields[key];
@@ -206,6 +243,7 @@ function mapRecordToProduct(record: AirtableRecord): Product {
     image,
     stock,
     sizes: sizes.length ? sizes : ["S", "M", "L", "XL"],
+    sizeStock: {},
     rating,
     featured: toBoolean(getField(record, ["Featured"])),
     featuredOrder: toNumber(getField(record, ["Featured Order"])),
@@ -408,6 +446,19 @@ function parseOrderItems(itemsText: string): OrderLineItem[] {
     .map((line) => line.trim())
     .filter(Boolean)
     .map((line) => {
+      const withId = line.match(
+        /^(rec[A-Za-z0-9]{14})\s\|\s(.*?)\s\|\sSize:\s(.*?)\s\|\sQty:\s(\d+)\s\|\s\$([0-9.]+)$/
+      );
+      if (withId) {
+        return {
+          productId: withId[1],
+          title: withId[2].trim(),
+          size: normalizeSizeLabel(withId[3]),
+          quantity: Number(withId[4]),
+          price: Number(withId[5]),
+        };
+      }
+
       const match = line.match(
         /^(.*?)\s\|\sSize:\s(.*?)\s\|\sQty:\s(\d+)\s\|\s\$([0-9.]+)$/
       );
@@ -423,7 +474,7 @@ function parseOrderItems(itemsText: string): OrderLineItem[] {
 
       return {
         title: match[1].trim(),
-        size: match[2].trim(),
+        size: normalizeSizeLabel(match[2]),
         quantity: Number(match[3]),
         price: Number(match[4]),
       };
@@ -481,7 +532,7 @@ function formatOrderItems(
   return items
     .map(
       (item) =>
-        `${item.title} | Size: ${item.size} | Qty: ${item.quantity} | $${item.price.toFixed(2)}`
+        `${item.id} | ${item.title} | Size: ${normalizeSizeLabel(item.size)} | Qty: ${item.quantity} | $${item.price.toFixed(2)}`
     )
     .join("\n");
 }
@@ -542,8 +593,9 @@ export async function createCustomerOrder(
     whishExternalId: input.whishExternalId,
     itemsText: formatOrderItems(input.items),
     items: input.items.map((item) => ({
+      productId: item.id,
       title: item.title,
-      size: item.size,
+      size: normalizeSizeLabel(item.size),
       quantity: item.quantity,
       price: item.price,
     })),
@@ -572,6 +624,7 @@ export async function updateCustomerOrderStatusByWhishExternalId(
   const existing = await getCustomerOrderByWhishExternalId(whishExternalId);
   if (!existing) return null;
 
+  const previousStatus = existing.status;
   const data = await mutateAirtable(getOrdersTablePath(), "PATCH", {
     records: [
       {
@@ -581,6 +634,14 @@ export async function updateCustomerOrderStatusByWhishExternalId(
     ],
     typecast: true,
   });
+
+  if (
+    status === "Cancelled" &&
+    previousStatus !== "Cancelled" &&
+    existing.items.length > 0
+  ) {
+    await restoreStockForOrderItems(existing.items, existing.productIds);
+  }
 
   const record = data.records[0];
   return record ? mapRecordToCustomerOrder(record) : existing;
@@ -602,12 +663,21 @@ export async function getProducts(): Promise<Product[]> {
     offset = data.offset;
   } while (offset);
 
-  return products;
+  return attachSizeStockToProducts(products);
 }
 
 export async function getProductByRecordId(id: string): Promise<Product | null> {
   const record = await fetchAirtableRecord(`${getProductsTablePath()}/${id}`);
-  return record ? mapRecordToProduct(record) : null;
+  if (!record) return null;
+  const product = mapRecordToProduct(record);
+  const sizeStock = await getSizeInventoryForProduct(id);
+  const sizes = sizesFromStock(sizeStock);
+  return {
+    ...product,
+    sizeStock,
+    sizes: sizes.length ? sizes : product.sizes,
+    stock: sizes.length ? sumSizeStock(sizeStock) : product.stock,
+  };
 }
 
 export async function getProductById(id: string): Promise<Product | null> {
@@ -621,14 +691,24 @@ export async function getProductById(id: string): Promise<Product | null> {
 }
 
 export async function createProduct(input: ProductInput): Promise<Product> {
+  const sizeStock = sanitizeSizeStock(input.sizeStock);
+  const derivedSizes = sizesFromStock(sizeStock);
+  const derivedStock = sumSizeStock(sizeStock);
+
   const includeCuration =
     input.featured !== undefined ||
     input.featuredOrder !== undefined ||
     input.showOnNewest !== undefined ||
     input.newestOrder !== undefined;
 
+  const payload: ProductInput = {
+    ...input,
+    sizes: derivedSizes.length ? derivedSizes : input.sizes,
+    stock: derivedSizes.length ? derivedStock : input.stock ?? null,
+  };
+
   const data = await mutateAirtable(getProductsTablePath(), "POST", {
-    records: [{ fields: productInputToFields(input, { includeCuration }) }],
+    records: [{ fields: productInputToFields(payload, { includeCuration }) }],
     typecast: true,
   });
 
@@ -637,7 +717,11 @@ export async function createProduct(input: ProductInput): Promise<Product> {
     throw new Error("Airtable did not return a created product record");
   }
 
-  return mapRecordToProduct(record);
+  if (input.sizeStock) {
+    await upsertSizeInventory(record.id, sizeStock);
+  }
+
+  return (await getProductByRecordId(record.id)) ?? mapRecordToProduct(record);
 }
 
 export async function updateProduct(
@@ -653,14 +737,29 @@ export async function updateProduct(
     input.showOnNewest !== undefined ||
     input.newestOrder !== undefined;
 
+  const sizeStock =
+    input.sizeStock !== undefined
+      ? sanitizeSizeStock(input.sizeStock)
+      : existing.sizeStock;
+  const derivedSizes = sizesFromStock(sizeStock);
+  const derivedStock = sumSizeStock(sizeStock);
+
   const merged: ProductInput = {
     title: input.title ?? existing.title,
     price: input.price ?? existing.price,
     description: input.description ?? existing.description,
     category: input.category ?? existing.category,
     image: input.image !== undefined ? input.image : existing.image,
-    stock: input.stock !== undefined ? input.stock : existing.stock,
-    sizes: input.sizes ?? existing.sizes,
+    stock:
+      input.sizeStock !== undefined
+        ? derivedStock
+        : input.stock !== undefined
+          ? input.stock
+          : existing.stock,
+    sizes:
+      input.sizeStock !== undefined
+        ? derivedSizes
+        : input.sizes ?? existing.sizes,
     rating: input.rating !== undefined ? input.rating : existing.rating,
     featured: input.featured !== undefined ? input.featured : existing.featured,
     featuredOrder:
@@ -676,16 +775,327 @@ export async function updateProduct(
     typecast: true,
   });
 
+  if (input.sizeStock !== undefined) {
+    await upsertSizeInventory(id, sizeStock);
+  }
+
   const record = data.records[0];
-  return record ? mapRecordToProduct(record) : existing;
+  return (await getProductByRecordId(id)) ?? (record ? mapRecordToProduct(record) : existing);
 }
 
 export async function deleteProduct(id: string): Promise<boolean> {
   const existing = await getProductByRecordId(id);
   if (!existing) return false;
 
+  const rows = await listSizeInventoryRowsForProduct(id);
+  for (const row of rows) {
+    await deleteAirtableRecord(getSizeInventoryTablePath(), row.id);
+  }
+
   await deleteAirtableRecord(getProductsTablePath(), id);
   return true;
+}
+
+async function listAllSizeInventoryRows(): Promise<SizeInventoryRow[]> {
+  const tablePath = getSizeInventoryTablePath();
+  const rows: SizeInventoryRow[] = [];
+  let offset: string | undefined;
+
+  do {
+    const query = new URLSearchParams();
+    query.set("pageSize", "100");
+    if (offset) query.set("offset", offset);
+
+    const data = await fetchAirtable(`${tablePath}?${query.toString()}`);
+    for (const record of data.records) {
+      const productIds = Array.isArray(record.fields.Product)
+        ? record.fields.Product.filter(
+            (item): item is string => typeof item === "string" && isAirtableRecordId(item)
+          )
+        : [];
+      const productId = productIds[0];
+      if (!productId) continue;
+
+      const sizeRaw = firstString(record.fields.Size);
+      if (!sizeRaw) continue;
+
+      rows.push({
+        id: record.id,
+        productId,
+        size: normalizeSizeLabel(sizeRaw),
+        quantity: toNumber(record.fields["Quantity in Stock"]) ?? 0,
+      });
+    }
+
+    offset = data.offset;
+  } while (offset);
+
+  return rows;
+}
+
+async function listSizeInventoryRowsForProduct(
+  productId: string
+): Promise<SizeInventoryRow[]> {
+  const query = new URLSearchParams();
+  query.set("pageSize", "100");
+  query.set(
+    "filterByFormula",
+    `FIND("${productId}", ARRAYJOIN({Product}))`
+  );
+
+  const data = await fetchAirtable(
+    `${getSizeInventoryTablePath()}?${query.toString()}`
+  );
+
+  return data.records
+    .map((record) => {
+      const productIds = Array.isArray(record.fields.Product)
+        ? record.fields.Product.filter(
+            (item): item is string => typeof item === "string" && isAirtableRecordId(item)
+          )
+        : [];
+      if (!productIds.includes(productId)) return null;
+      const sizeRaw = firstString(record.fields.Size);
+      if (!sizeRaw) return null;
+      return {
+        id: record.id,
+        productId,
+        size: normalizeSizeLabel(sizeRaw),
+        quantity: toNumber(record.fields["Quantity in Stock"]) ?? 0,
+      } satisfies SizeInventoryRow;
+    })
+    .filter((row): row is SizeInventoryRow => row !== null);
+}
+
+async function attachSizeStockToProducts(products: Product[]): Promise<Product[]> {
+  if (products.length === 0) return products;
+
+  const rows = await listAllSizeInventoryRows();
+  const byProduct = new Map<string, SizeStockMap>();
+
+  for (const row of rows) {
+    const current = byProduct.get(row.productId) ?? {};
+    const size = row.size as ProductSize;
+    if ((PRODUCT_SIZE_OPTIONS as readonly string[]).includes(size)) {
+      current[size] = (current[size] ?? 0) + Math.max(0, row.quantity);
+      byProduct.set(row.productId, current);
+    }
+  }
+
+  return products.map((product) => {
+    const sizeStock = byProduct.get(product.id) ?? {};
+    const sizes = sizesFromStock(sizeStock);
+    if (!sizes.length) {
+      return { ...product, sizeStock: {} };
+    }
+
+    return {
+      ...product,
+      sizeStock,
+      sizes,
+      stock: sumSizeStock(sizeStock),
+    };
+  });
+}
+
+export async function getSizeInventoryForProduct(
+  productId: string
+): Promise<SizeStockMap> {
+  const rows = await listSizeInventoryRowsForProduct(productId);
+  const sizeStock: SizeStockMap = {};
+
+  for (const row of rows) {
+    const size = row.size as ProductSize;
+    if ((PRODUCT_SIZE_OPTIONS as readonly string[]).includes(size)) {
+      sizeStock[size] = (sizeStock[size] ?? 0) + Math.max(0, row.quantity);
+    }
+  }
+
+  return sizeStock;
+}
+
+async function syncProductStockFromSizeMap(
+  productId: string,
+  sizeStock: SizeStockMap
+): Promise<void> {
+  const sizes = sizesFromStock(sizeStock);
+  await mutateAirtable(getProductsTablePath(), "PATCH", {
+    records: [
+      {
+        id: productId,
+        fields: {
+          Stock: sumSizeStock(sizeStock),
+          Sizes: sizes,
+        },
+      },
+    ],
+    typecast: true,
+  });
+}
+
+export async function upsertSizeInventory(
+  productId: string,
+  sizeStockInput: SizeStockMap
+): Promise<SizeStockMap> {
+  const sizeStock = sanitizeSizeStock(sizeStockInput);
+  const existingRows = await listSizeInventoryRowsForProduct(productId);
+  const bySize = new Map(existingRows.map((row) => [row.size, row]));
+
+  const creates: Array<Record<string, unknown>> = [];
+  const updates: Array<{ id: string; fields: Record<string, unknown> }> = [];
+  const deletes: string[] = [];
+
+  for (const size of PRODUCT_SIZE_OPTIONS) {
+    const qty = sizeStock[size] ?? 0;
+    const existing = bySize.get(size);
+
+    if (qty <= 0) {
+      if (existing) deletes.push(existing.id);
+      continue;
+    }
+
+    if (existing) {
+      updates.push({
+        id: existing.id,
+        fields: { "Quantity in Stock": qty },
+      });
+    } else {
+      creates.push({
+        fields: {
+          SKU: `${productId.slice(-6)}-${size.replace(/\s+/g, "")}`,
+          Product: [productId],
+          Size: size,
+          "Quantity in Stock": qty,
+        },
+      });
+    }
+  }
+
+  // Remove unexpected duplicate / unknown size rows
+  for (const row of existingRows) {
+    if (!(PRODUCT_SIZE_OPTIONS as readonly string[]).includes(row.size)) {
+      deletes.push(row.id);
+    }
+  }
+
+  // Airtable allows max 10 records per request
+  for (let i = 0; i < creates.length; i += 10) {
+    await mutateAirtable(getSizeInventoryTablePath(), "POST", {
+      records: creates.slice(i, i + 10),
+      typecast: true,
+    });
+  }
+
+  for (let i = 0; i < updates.length; i += 10) {
+    await mutateAirtable(getSizeInventoryTablePath(), "PATCH", {
+      records: updates.slice(i, i + 10),
+      typecast: true,
+    });
+  }
+
+  for (const recordId of deletes) {
+    await deleteAirtableRecord(getSizeInventoryTablePath(), recordId);
+  }
+
+  await syncProductStockFromSizeMap(productId, sizeStock);
+  return sizeStock;
+}
+
+export async function decrementSizeStock(
+  productId: string,
+  size: string,
+  qty: number
+): Promise<SizeStockMap> {
+  if (qty < 1) throw new Error("Quantity must be at least 1");
+  const normalized = normalizeSizeLabel(size) as ProductSize;
+  if (!(PRODUCT_SIZE_OPTIONS as readonly string[]).includes(normalized)) {
+    throw new Error(`Unsupported size: ${size}`);
+  }
+
+  const current = await getSizeInventoryForProduct(productId);
+  const available = current[normalized] ?? 0;
+  if (available < qty) {
+    throw new Error(
+      `Insufficient stock for size ${normalized}. Available: ${available}, requested: ${qty}`
+    );
+  }
+
+  const next: SizeStockMap = {
+    ...current,
+    [normalized]: available - qty,
+  };
+
+  return upsertSizeInventory(productId, next);
+}
+
+export async function restoreSizeStock(
+  productId: string,
+  size: string,
+  qty: number
+): Promise<SizeStockMap> {
+  if (qty < 1) return getSizeInventoryForProduct(productId);
+  const normalized = normalizeSizeLabel(size) as ProductSize;
+  if (!(PRODUCT_SIZE_OPTIONS as readonly string[]).includes(normalized)) {
+    throw new Error(`Unsupported size: ${size}`);
+  }
+
+  const current = await getSizeInventoryForProduct(productId);
+  const next: SizeStockMap = {
+    ...current,
+    [normalized]: (current[normalized] ?? 0) + qty,
+  };
+
+  return upsertSizeInventory(productId, next);
+}
+
+export async function reserveStockForOrderItems(
+  items: Array<{ id: string; size: string; quantity: number; title: string }>
+): Promise<void> {
+  const applied: Array<{ id: string; size: string; quantity: number }> = [];
+
+  try {
+    for (const item of items) {
+      if (!isAirtableRecordId(item.id)) {
+        throw new Error(`Cannot reserve stock for "${item.title}" — invalid product id`);
+      }
+      await decrementSizeStock(item.id, item.size, item.quantity);
+      applied.push({ id: item.id, size: item.size, quantity: item.quantity });
+    }
+  } catch (error) {
+    for (const item of applied.reverse()) {
+      try {
+        await restoreSizeStock(item.id, item.size, item.quantity);
+      } catch {
+        // Best-effort rollback
+      }
+    }
+    throw error;
+  }
+}
+
+export async function restoreStockForOrderItems(
+  items: OrderLineItem[],
+  productIdsFallback: string[] = []
+): Promise<void> {
+  const validFallbackIds = productIdsFallback.filter(isAirtableRecordId);
+
+  for (let index = 0; index < items.length; index++) {
+    const item = items[index];
+    const productId =
+      item.productId && isAirtableRecordId(item.productId)
+        ? item.productId
+        : validFallbackIds.length === 1
+          ? validFallbackIds[0]
+          : validFallbackIds[index];
+
+    if (!productId || item.quantity < 1) continue;
+
+    try {
+      await restoreSizeStock(productId, item.size, item.quantity);
+    } catch {
+      // Best-effort restore
+    }
+  }
 }
 
 export async function getFeaturedProducts(limit = 4): Promise<Product[]> {
@@ -754,10 +1164,19 @@ export async function updateOrderStatus(
   const existing = await getOrderById(recordId);
   if (!existing) return null;
 
+  const previousStatus = existing.status;
   const data = await mutateAirtable(getOrdersTablePath(), "PATCH", {
     records: [{ id: recordId, fields: { Status: status } }],
     typecast: true,
   });
+
+  if (
+    status === "Cancelled" &&
+    previousStatus !== "Cancelled" &&
+    existing.items.length > 0
+  ) {
+    await restoreStockForOrderItems(existing.items, existing.productIds);
+  }
 
   const record = data.records[0];
   return record ? mapRecordToCustomerOrder(record) : existing;

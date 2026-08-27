@@ -1,7 +1,14 @@
 import { NextResponse } from "next/server";
 import {
   createCustomerOrder,
+  getSizeInventoryForProduct,
+  normalizeSizeLabel,
+  PRODUCT_SIZE_OPTIONS,
+  reserveStockForOrderItems,
+  restoreStockForOrderItems,
+  updateOrderStatus,
   type PaymentMethodLabel,
+  type ProductSize,
 } from "@/lib/airtable";
 import { getWebsiteUrl, getWhishClient, generateMockExternalId, isWhishConfigured, isWhishMockMode } from "@/lib/whish";
 
@@ -32,6 +39,23 @@ type CreateOrderBody = {
 
 function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+async function assertItemsInStock(items: OrderItemBody[]): Promise<void> {
+  for (const item of items) {
+    const size = normalizeSizeLabel(item.size) as ProductSize;
+    if (!(PRODUCT_SIZE_OPTIONS as readonly string[]).includes(size)) {
+      throw new Error(`Unsupported size "${item.size}" for ${item.title}`);
+    }
+
+    const sizeStock = await getSizeInventoryForProduct(item.id);
+    const available = sizeStock[size] ?? 0;
+    if (available < item.quantity) {
+      throw new Error(
+        `Not enough stock for ${item.title} (${size}). Available: ${available}, requested: ${item.quantity}`
+      );
+    }
+  }
 }
 
 export async function POST(request: Request) {
@@ -71,6 +95,15 @@ export async function POST(request: Request) {
       ) {
         return NextResponse.json({ error: "Invalid cart items" }, { status: 400 });
       }
+      item.size = normalizeSizeLabel(item.size);
+    }
+
+    try {
+      await assertItemsInStock(items);
+    } catch (stockError) {
+      const message =
+        stockError instanceof Error ? stockError.message : "Insufficient stock";
+      return NextResponse.json({ error: message }, { status: 400 });
     }
 
     const subtotal =
@@ -80,8 +113,23 @@ export async function POST(request: Request) {
     const shipping = typeof body.shipping === "number" ? body.shipping : 0;
     const total = typeof body.total === "number" ? body.total : subtotal + shipping;
 
+    await reserveStockForOrderItems(items);
+
+    const rollbackStock = async () => {
+      await restoreStockForOrderItems(
+        items.map((item) => ({
+          productId: item.id,
+          title: item.title,
+          size: item.size,
+          quantity: item.quantity,
+          price: item.price,
+        }))
+      );
+    };
+
     if (paymentMethod === "Whish") {
       if (!isWhishConfigured()) {
+        await rollbackStock();
         return NextResponse.json(
           {
             error:
@@ -99,9 +147,50 @@ export async function POST(request: Request) {
         headerOrigin ||
         (forwardedHost ? `${forwardedProto}://${forwardedHost}` : websiteUrl);
 
-      if (isWhishMockMode()) {
-        const externalId = generateMockExternalId();
-        const order = await createCustomerOrder({
+      let createdOrder: Awaited<ReturnType<typeof createCustomerOrder>> | null =
+        null;
+
+      try {
+        if (isWhishMockMode()) {
+          const externalId = generateMockExternalId();
+          createdOrder = await createCustomerOrder({
+            email,
+            phone,
+            location,
+            paymentMethod: "Whish",
+            subtotal,
+            shipping,
+            total,
+            items,
+            status: "Awaiting Payment",
+            whishExternalId: String(externalId),
+          });
+
+          const successRedirectUrl = `${requestOrigin}/cart?whish=success&orderId=${encodeURIComponent(createdOrder.orderId)}`;
+          const failureRedirectUrl = `${requestOrigin}/cart?whish=failed&orderId=${encodeURIComponent(createdOrder.orderId)}`;
+          const paymentUrl =
+            `${requestOrigin}/checkout/whish-mock` +
+            `?orderId=${encodeURIComponent(createdOrder.orderId)}` +
+            `&externalId=${encodeURIComponent(String(externalId))}` +
+            `&amount=${encodeURIComponent(String(total))}` +
+            `&successUrl=${encodeURIComponent(successRedirectUrl)}` +
+            `&failureUrl=${encodeURIComponent(failureRedirectUrl)}`;
+
+          return NextResponse.json(
+            {
+              order: createdOrder,
+              paymentUrl,
+              externalId,
+              mock: true,
+            },
+            { status: 201 }
+          );
+        }
+
+        const whish = getWhishClient();
+        const externalId = whish.generateExternalId();
+
+        createdOrder = await createCustomerOrder({
           email,
           phone,
           location,
@@ -114,90 +203,73 @@ export async function POST(request: Request) {
           whishExternalId: String(externalId),
         });
 
-        const successRedirectUrl = `${requestOrigin}/cart?whish=success&orderId=${encodeURIComponent(order.orderId)}`;
-        const failureRedirectUrl = `${requestOrigin}/cart?whish=failed&orderId=${encodeURIComponent(order.orderId)}`;
-        const paymentUrl =
-          `${requestOrigin}/checkout/whish-mock` +
-          `?orderId=${encodeURIComponent(order.orderId)}` +
-          `&externalId=${encodeURIComponent(String(externalId))}` +
-          `&amount=${encodeURIComponent(String(total))}` +
-          `&successUrl=${encodeURIComponent(successRedirectUrl)}` +
-          `&failureUrl=${encodeURIComponent(failureRedirectUrl)}`;
+        const payment = await whish.createPayment({
+          amount: total,
+          currency: "USD",
+          invoice: `Order ${createdOrder.orderId}`,
+          externalId,
+          successCallbackUrl: `${websiteUrl}/api/whish/callback/success`,
+          failureCallbackUrl: `${websiteUrl}/api/whish/callback/failure`,
+          successRedirectUrl: `${websiteUrl}/cart?whish=success&orderId=${encodeURIComponent(createdOrder.orderId)}`,
+          failureRedirectUrl: `${websiteUrl}/cart?whish=failed&orderId=${encodeURIComponent(createdOrder.orderId)}`,
+        });
+
+        if (!payment.success || !payment.collectUrl) {
+          // Cancel restores reserved stock once (do not also rollbackStock).
+          await updateOrderStatus(createdOrder.id, "Cancelled");
+          return NextResponse.json(
+            {
+              error: payment.dialog?.message ?? "Failed to start Whish payment",
+              code: payment.code,
+            },
+            { status: 400 }
+          );
+        }
 
         return NextResponse.json(
           {
-            order,
-            paymentUrl,
+            order: createdOrder,
+            paymentUrl: payment.collectUrl,
             externalId,
-            mock: true,
           },
           { status: 201 }
         );
+      } catch (error) {
+        if (createdOrder) {
+          // Order exists: cancel restores stock. Avoid double-restore via rollbackStock.
+          try {
+            await updateOrderStatus(createdOrder.id, "Cancelled");
+          } catch {
+            await rollbackStock();
+          }
+        } else {
+          await rollbackStock();
+        }
+        throw error;
       }
+    }
 
-      const whish = getWhishClient();
-      const externalId = whish.generateExternalId();
-
+    try {
       const order = await createCustomerOrder({
         email,
         phone,
         location,
-        paymentMethod: "Whish",
+        paymentMethod: paymentMethod as PaymentMethodLabel,
         subtotal,
         shipping,
         total,
         items,
-        status: "Awaiting Payment",
-        whishExternalId: String(externalId),
+        status: "Pending",
       });
 
-      const payment = await whish.createPayment({
-        amount: total,
-        currency: "USD",
-        invoice: `Order ${order.orderId}`,
-        externalId,
-        successCallbackUrl: `${websiteUrl}/api/whish/callback/success`,
-        failureCallbackUrl: `${websiteUrl}/api/whish/callback/failure`,
-        successRedirectUrl: `${websiteUrl}/cart?whish=success&orderId=${encodeURIComponent(order.orderId)}`,
-        failureRedirectUrl: `${websiteUrl}/cart?whish=failed&orderId=${encodeURIComponent(order.orderId)}`,
-      });
-
-      if (!payment.success || !payment.collectUrl) {
-        return NextResponse.json(
-          {
-            error: payment.dialog?.message ?? "Failed to start Whish payment",
-            code: payment.code,
-            order,
-          },
-          { status: 400 }
-        );
-      }
-
-      return NextResponse.json(
-        {
-          order,
-          paymentUrl: payment.collectUrl,
-          externalId,
-        },
-        { status: 201 }
-      );
+      return NextResponse.json({ order }, { status: 201 });
+    } catch (error) {
+      await rollbackStock();
+      throw error;
     }
-
-    const order = await createCustomerOrder({
-      email,
-      phone,
-      location,
-      paymentMethod: paymentMethod as PaymentMethodLabel,
-      subtotal,
-      shipping,
-      total,
-      items,
-      status: "Pending",
-    });
-
-    return NextResponse.json({ order }, { status: 201 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to create order";
-    return NextResponse.json({ error: message }, { status: 500 });
+    const status = message.toLowerCase().includes("stock") ? 400 : 500;
+    return NextResponse.json({ error: message }, { status });
   }
 }

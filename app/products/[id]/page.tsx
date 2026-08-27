@@ -8,6 +8,7 @@ import gsap from 'gsap'
 import { ShoppingCart, Star, StarHalf } from 'lucide-react'
 import Navbar from '../../components/Navbar'
 import { addToCart } from '@/lib/cart'
+import { PRODUCT_SIZE_OPTIONS } from '@/lib/product-sizes'
 
 type Product = {
   id: string
@@ -16,6 +17,7 @@ type Product = {
   description: string
   image: string
   sizes: string[]
+  sizeStock?: Record<string, number>
   rating: number | null
   stock: number | null
 }
@@ -47,7 +49,14 @@ export default function ProductDetailsPage() {
 
         if (isMounted) {
           setProduct(data.product)
-          setSelectedSize(data.product?.sizes?.[0] || 'M')
+          const stockMap = data.product?.sizeStock as Record<string, number> | undefined
+          const available =
+            stockMap && Object.keys(stockMap).length > 0
+              ? Object.entries(stockMap)
+                  .filter(([, qty]) => qty > 0)
+                  .map(([size]) => size)
+              : data.product?.sizes || []
+          setSelectedSize(available[0] || data.product?.sizes?.[0] || 'M')
         }
       } catch (err) {
         if (isMounted) {
@@ -177,7 +186,17 @@ export default function ProductDetailsPage() {
 
   const fullStars = Math.max(0, Math.min(5, Math.floor(product.rating ?? 4)))
   const hasHalfStar = (product.rating ?? 4.5) % 1 >= 0.5
-  const isOutOfStock = product.stock === 0
+  const sizeStock = product.sizeStock ?? {}
+  const hasSizeStock = Object.keys(sizeStock).length > 0
+  const displaySizes = hasSizeStock
+    ? PRODUCT_SIZE_OPTIONS.filter((size) => size in sizeStock)
+    : product.sizes
+  const selectedQty = hasSizeStock ? sizeStock[selectedSize] ?? 0 : null
+  const isSizeUnavailable = hasSizeStock && selectedQty !== null && selectedQty <= 0
+  const isOutOfStock =
+    product.stock === 0 ||
+    (hasSizeStock && Object.values(sizeStock).every((qty) => qty <= 0)) ||
+    isSizeUnavailable
 
   return (
     <main className="min-h-screen bg-[var(--color-bg)] pt-32 pb-24 overflow-x-hidden" ref={containerRef}>
@@ -237,21 +256,35 @@ export default function ProductDetailsPage() {
                    <h3 className="font-bebas text-xl tracking-wider uppercase text-gray-400">Select Size</h3>
                    <span className="text-sm text-gray-400 underline cursor-pointer hover:text-white transition-colors">Size Guide</span>
                 </div>
-                <div className="flex gap-4">
-                   {product.sizes.map(size => (
+                <div className="flex flex-wrap gap-4">
+                   {displaySizes.map(size => {
+                      const qty = hasSizeStock ? sizeStock[size] ?? 0 : null
+                      const soldOut = qty !== null && qty <= 0
+                      return (
                       <button 
                         key={size}
+                        type="button"
+                        disabled={soldOut}
                         onClick={() => setSelectedSize(size)}
-                        className={`w-14 h-14 rounded-full font-bebas text-xl flex items-center justify-center border transition-all ${
-                          selectedSize === size 
+                        className={`min-w-14 h-14 px-3 rounded-full font-bebas text-xl flex flex-col items-center justify-center border transition-all ${
+                          soldOut
+                            ? 'bg-neutral-200 text-neutral-400 border-neutral-300 cursor-not-allowed opacity-60'
+                            : selectedSize === size 
                             ? 'bg-[var(--color-foreground)] text-[var(--background)] border-[var(--color-foreground)] scale-110 shadow-[0_0_20px_rgba(255,255,255,0.2)]' 
                             : 'bg-white/70 text-black border-black/20 hover:bg-white hover:border-black/50'
                         }`}
                       >
-                         {size}
+                         <span>{size}</span>
+                         {soldOut ? <span className="text-[10px] font-inter tracking-wide">OUT</span> : null}
                       </button>
-                   ))}
+                      )
+                   })}
                 </div>
+                {!isOutOfStock && selectedQty !== null ? (
+                  <p className="mt-3 text-sm text-gray-400 font-inter tracking-wide">
+                    {selectedQty} left in {selectedSize}
+                  </p>
+                ) : null}
              </div>
 
              {/* Dopamine CTA */}

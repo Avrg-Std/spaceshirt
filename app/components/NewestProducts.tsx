@@ -2,11 +2,13 @@
 
 import { useEffect, useRef, useState } from 'react'
 import Image from 'next/image'
+import { useRouter } from 'next/navigation'
 import gsap from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import { ShoppingCart } from 'lucide-react'
 import { addToCart } from '@/lib/cart'
 import type { Product } from '@/lib/airtable'
+import { PRODUCT_SIZE_OPTIONS } from '@/lib/product-sizes'
 
 gsap.registerPlugin(ScrollTrigger)
 
@@ -15,6 +17,7 @@ type DisplayProduct = {
   title: string
   image: string
   price: number
+  sizes: string[]
   aspect: string
   col: string
   offset: string
@@ -52,6 +55,7 @@ const fallbackProducts: DisplayProduct[] = [
     title: 'BELT BAG',
     image: '/images/image 1.jpeg',
     price: 45,
+    sizes: ['ONE SIZE'],
     ...layoutByIndex[0],
   },
   {
@@ -59,6 +63,7 @@ const fallbackProducts: DisplayProduct[] = [
     title: 'HOODIE',
     image: '/images/image 2.jpeg',
     price: 95,
+    sizes: ['S', 'M', 'L', 'XL'],
     ...layoutByIndex[1],
   },
   {
@@ -66,21 +71,29 @@ const fallbackProducts: DisplayProduct[] = [
     title: 'TOTE BAG',
     image: '/images/image 8.jpeg',
     price: 35,
+    sizes: ['ONE SIZE'],
     ...layoutByIndex[2],
   },
 ]
 
 function toDisplayProducts(products: Product[]): DisplayProduct[] {
-  return products.slice(0, 3).map((product, index) => ({
-    id: product.id,
-    title: product.title,
-    image: product.image,
-    price: product.price,
-    ...layoutByIndex[index],
-  }))
+  return products.slice(0, 3).map((product, index) => {
+    const inStockSizes = PRODUCT_SIZE_OPTIONS.filter(
+      (size) => (product.sizeStock?.[size] ?? 0) > 0
+    )
+    return {
+      id: product.id,
+      title: product.title,
+      image: product.image,
+      price: product.price,
+      sizes: inStockSizes.length > 0 ? inStockSizes : product.sizes,
+      ...layoutByIndex[index],
+    }
+  })
 }
 
 export default function NewestProducts() {
+  const router = useRouter()
   const containerRef = useRef(null)
   const [products, setProducts] = useState<DisplayProduct[]>(fallbackProducts)
 
@@ -124,12 +137,17 @@ export default function NewestProducts() {
     e.preventDefault()
     e.stopPropagation()
 
+    if (product.sizes.length !== 1) {
+      router.push(`/products/${product.id}`)
+      return
+    }
+
     addToCart({
       id: product.id,
       title: product.title,
       image: product.image,
       price: product.price,
-      size: 'ONE SIZE',
+      size: product.sizes[0],
     })
 
     const cartIcon = document.getElementById('nav-cart-icon')

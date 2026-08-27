@@ -4,11 +4,14 @@ import { FormEvent, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { AdminCard, AdminInput, AdminPageHeader, AdminTextarea } from '../../components/AdminUI'
 import AdminImageUpload from '../../components/AdminImageUpload'
+import AdminSizeStock from '../../components/AdminSizeStock'
+import type { SizeStockMap } from '@/lib/product-sizes'
 
 export default function NewProductPage() {
   const router = useRouter()
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [sizeStock, setSizeStock] = useState<SizeStockMap>({})
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -26,10 +29,9 @@ export default function NewProductPage() {
           description: formData.get('description'),
           category: formData.get('category'),
           price: Number(formData.get('price')),
-          stock: formData.get('stock') ? Number(formData.get('stock')) : null,
-          sizes: formData.get('sizes'),
           rating: formData.get('rating') ? Number(formData.get('rating')) : null,
           image: formData.get('image'),
+          sizeStock,
         }),
       })
 
@@ -57,8 +59,7 @@ export default function NewProductPage() {
           <AdminTextarea label="Description" name="description" />
           <AdminInput label="Category" name="category" defaultValue="Uncategorized" />
           <AdminInput label="Price" name="price" type="number" step="0.01" min="0" required />
-          <AdminInput label="Stock" name="stock" type="number" min="0" />
-          <AdminInput label="Sizes" name="sizes" defaultValue="S, M, L, XL" />
+          <AdminSizeStock value={sizeStock} onChange={setSizeStock} />
           <AdminInput label="Rating" name="rating" type="number" step="0.1" min="0" max="5" />
           <AdminImageUpload />
 

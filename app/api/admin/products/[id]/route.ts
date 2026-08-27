@@ -2,10 +2,31 @@ import { NextResponse } from "next/server";
 import {
   deleteProduct,
   getProductByRecordId,
+  PRODUCT_SIZE_OPTIONS,
+  sanitizeSizeStock,
   updateProduct,
   type ProductInput,
+  type ProductSize,
+  type SizeStockMap,
 } from "@/lib/airtable";
 import { withAdminAuth } from "@/lib/admin-api";
+
+function parseSizeStock(value: unknown): SizeStockMap | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const entries = value as Record<string, unknown>;
+  const parsed: SizeStockMap = {};
+
+  for (const size of PRODUCT_SIZE_OPTIONS) {
+    if (entries[size] === undefined) continue;
+    const qty =
+      typeof entries[size] === "number" ? entries[size] : Number(entries[size]);
+    if (Number.isFinite(qty) && qty >= 0) {
+      parsed[size as ProductSize] = Math.floor(qty as number);
+    }
+  }
+
+  return sanitizeSizeStock(parsed);
+}
 
 function parseProductPatch(body: Record<string, unknown>): Partial<ProductInput> {
   const patch: Partial<ProductInput> = {};
@@ -18,14 +39,6 @@ function parseProductPatch(body: Record<string, unknown>): Partial<ProductInput>
     if (!Number.isFinite(price)) throw new Error("Valid price is required");
     patch.price = price;
   }
-  if (body.stock !== undefined) {
-    patch.stock =
-      body.stock === null
-        ? null
-        : typeof body.stock === "number"
-          ? body.stock
-          : Number(body.stock);
-  }
   if (body.rating !== undefined) {
     patch.rating =
       body.rating === null
@@ -35,17 +48,8 @@ function parseProductPatch(body: Record<string, unknown>): Partial<ProductInput>
           : Number(body.rating);
   }
   if (typeof body.image === "string") patch.image = body.image.trim();
-  if (typeof body.sizes === "string") {
-    patch.sizes = body.sizes
-      .split(/[,\s/]+/)
-      .map((size) => size.trim().toUpperCase())
-      .filter(Boolean);
-  }
-  if (Array.isArray(body.sizes)) {
-    patch.sizes = body.sizes
-      .filter((size): size is string => typeof size === "string")
-      .map((size) => size.trim().toUpperCase())
-      .filter(Boolean);
+  if (body.sizeStock !== undefined) {
+    patch.sizeStock = parseSizeStock(body.sizeStock) ?? {};
   }
   if (body.featured !== undefined) patch.featured = body.featured === true;
   if (body.featuredOrder !== undefined) {
