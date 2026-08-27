@@ -1,5 +1,6 @@
 'use client'
 
+import Image from 'next/image'
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { AdminCard, AdminPageHeader } from '../components/AdminUI'
@@ -84,6 +85,7 @@ export default function AdminProductsPage() {
             <table className="w-full text-left">
               <thead className="bg-neutral-50 border-b border-black/10">
                 <tr>
+                  <th className="px-6 py-4 text-xs uppercase tracking-wider text-neutral-500">Image</th>
                   <th className="px-6 py-4 text-xs uppercase tracking-wider text-neutral-500">Product</th>
                   <th className="px-6 py-4 text-xs uppercase tracking-wider text-neutral-500">Category</th>
                   <th className="px-6 py-4 text-xs uppercase tracking-wider text-neutral-500">Price</th>
@@ -94,6 +96,17 @@ export default function AdminProductsPage() {
               <tbody>
                 {filteredProducts.map((product) => (
                   <tr key={product.id} className="border-b border-black/5">
+                    <td className="px-6 py-4">
+                      <div className="relative w-12 h-12 rounded-lg overflow-hidden border border-black/10 bg-white">
+                        <Image
+                          src={product.image}
+                          alt={product.title}
+                          fill
+                          className="object-contain p-1"
+                          unoptimized={product.image.startsWith('/')}
+                        />
+                      </div>
+                    </td>
                     <td className="px-6 py-4 font-medium">{product.title}</td>
                     <td className="px-6 py-4 text-neutral-600">{product.category}</td>
                     <td className="px-6 py-4">${product.price.toFixed(2)}</td>

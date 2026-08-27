@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { AdminCard, AdminInput, AdminPageHeader, AdminTextarea } from '../../components/AdminUI'
+import AdminImageUpload from '../../components/AdminImageUpload'
 import type { Product } from '@/lib/airtable'
 
 export default function EditProductPage() {
@@ -114,7 +115,7 @@ export default function EditProductPage() {
             max="5"
             defaultValue={product.rating ?? ''}
           />
-          <AdminInput label="Image URL" name="image" type="url" defaultValue={product.image} />
+          <AdminImageUpload defaultValue={product.image} />
 
           {error ? (
             <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-4 py-3">

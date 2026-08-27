@@ -3,6 +3,7 @@
 import { FormEvent, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { AdminCard, AdminInput, AdminPageHeader, AdminTextarea } from '../../components/AdminUI'
+import AdminImageUpload from '../../components/AdminImageUpload'
 
 export default function NewProductPage() {
   const router = useRouter()
@@ -59,7 +60,7 @@ export default function NewProductPage() {
           <AdminInput label="Stock" name="stock" type="number" min="0" />
           <AdminInput label="Sizes" name="sizes" defaultValue="S, M, L, XL" />
           <AdminInput label="Rating" name="rating" type="number" step="0.1" min="0" max="5" />
-          <AdminInput label="Image URL" name="image" type="url" placeholder="https://..." />
+          <AdminImageUpload />
 
           {error ? (
             <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
