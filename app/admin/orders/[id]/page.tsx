@@ -19,6 +19,7 @@ export default function AdminOrderDetailPage() {
   const [status, setStatus] = useState<OrderStatus>('Pending')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [resending, setResending] = useState(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
 
@@ -69,6 +70,29 @@ export default function AdminOrderDetailPage() {
     }
   }
 
+  async function handleResendEmail() {
+    if (!order) return
+
+    setResending(true)
+    setError('')
+    setMessage('')
+
+    try {
+      const response = await fetch(`/api/admin/orders/${order.id}/resend`, {
+        method: 'POST',
+      })
+      const data = (await response.json()) as { error?: string }
+      if (!response.ok) {
+        throw new Error(data.error ?? 'Failed to resend confirmation email')
+      }
+      setMessage(`Confirmation email resent to ${order.email}.`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to resend email')
+    } finally {
+      setResending(false)
+    }
+  }
+
   if (loading) return <p className="text-neutral-600">Loading order...</p>
   if (!order) return <p className="text-red-600">{error || 'Order not found'}</p>
 
@@ -77,7 +101,19 @@ export default function AdminOrderDetailPage() {
       <AdminPageHeader
         title={order.orderId}
         description={`Placed ${order.orderDate ? new Date(order.orderDate).toLocaleString() : '—'}`}
-        actions={<StatusBadge status={order.status} />}
+        actions={
+          <div className="flex flex-wrap items-center gap-3">
+            <StatusBadge status={order.status} />
+            <button
+              type="button"
+              onClick={handleResendEmail}
+              disabled={resending}
+              className="px-4 py-2 bg-neutral-100 font-bebas tracking-wide rounded-xl hover:bg-neutral-200 transition-colors disabled:opacity-50"
+            >
+              {resending ? 'SENDING...' : 'RESEND EMAIL'}
+            </button>
+          </div>
+        }
       />
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">

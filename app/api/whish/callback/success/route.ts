@@ -3,6 +3,7 @@ import {
   getCustomerOrderByWhishExternalId,
   updateCustomerOrderStatusByWhishExternalId,
 } from "@/lib/airtable";
+import { sendOrderConfirmationEmail } from "@/lib/email";
 import {
   getWhishClient,
   isWhishConfigured,
@@ -28,10 +29,24 @@ export async function GET(request: Request) {
     }
 
     if (isWhishMockMode()) {
-      if (order.status !== "Confirmed") {
-        await updateCustomerOrderStatusByWhishExternalId(parsed.externalId, "Confirmed");
+      const wasConfirmed = order.status === "Confirmed";
+      let confirmedOrder = order;
+      if (!wasConfirmed) {
+        confirmedOrder =
+          (await updateCustomerOrderStatusByWhishExternalId(
+            parsed.externalId,
+            "Confirmed"
+          )) ?? order;
+        void sendOrderConfirmationEmail({
+          ...confirmedOrder,
+          status: "Confirmed",
+        }).catch(() => undefined);
       }
-      return NextResponse.json({ ok: true, orderId: order.orderId, mock: true });
+      return NextResponse.json({
+        ok: true,
+        orderId: confirmedOrder.orderId,
+        mock: true,
+      });
     }
 
     const whish = await getWhishClient();
@@ -48,11 +63,21 @@ export async function GET(request: Request) {
       return NextResponse.json({ ok: false, reason: "Amount mismatch" }, { status: 400 });
     }
 
-    if (order.status !== "Confirmed") {
-      await updateCustomerOrderStatusByWhishExternalId(parsed.externalId, "Confirmed");
+    const wasConfirmed = order.status === "Confirmed";
+    let confirmedOrder = order;
+    if (!wasConfirmed) {
+      confirmedOrder =
+        (await updateCustomerOrderStatusByWhishExternalId(
+          parsed.externalId,
+          "Confirmed"
+        )) ?? order;
+      void sendOrderConfirmationEmail({
+        ...confirmedOrder,
+        status: "Confirmed",
+      }).catch(() => undefined);
     }
 
-    return NextResponse.json({ ok: true, orderId: order.orderId });
+    return NextResponse.json({ ok: true, orderId: confirmedOrder.orderId });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Callback failed";
     return NextResponse.json({ error: message }, { status: 500 });

@@ -10,6 +10,7 @@ import {
   type PaymentMethodLabel,
   type ProductSize,
 } from "@/lib/airtable";
+import { sendOrderConfirmationEmail } from "@/lib/email";
 import { getWebsiteUrl, getWhishClient, generateMockExternalId, isWhishConfigured, isWhishMockMode } from "@/lib/whish";
 
 const PAYMENT_METHODS: PaymentMethodLabel[] = [
@@ -262,6 +263,9 @@ export async function POST(request: Request) {
         items,
         status: "Pending",
       });
+
+      // Non-blocking — checkout must succeed even if email fails
+      void sendOrderConfirmationEmail(order).catch(() => undefined);
 
       return NextResponse.json({ order }, { status: 201 });
     } catch (error) {
