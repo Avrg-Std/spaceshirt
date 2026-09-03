@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
-import { parseCallbackUrl } from "whish-pay";
 import {
   getCustomerOrderByWhishExternalId,
   updateCustomerOrderStatusByWhishExternalId,
 } from "@/lib/airtable";
-import { getWhishClient, isWhishConfigured, isWhishMockMode } from "@/lib/whish";
+import {
+  getWhishClient,
+  isWhishConfigured,
+  isWhishMockMode,
+  parseCallbackUrl,
+} from "@/lib/whish";
 
 export async function GET(request: Request) {
   try {
@@ -13,10 +17,11 @@ export async function GET(request: Request) {
     }
 
     const parsed = parseCallbackUrl(request.url);
-    if (!parsed.externalId || !parsed.currency) {
+    if (!parsed.externalId) {
       return NextResponse.json({ error: "Missing callback parameters" }, { status: 400 });
     }
 
+    const currency = parsed.currency ?? "USD";
     const order = await getCustomerOrderByWhishExternalId(parsed.externalId);
     if (!order) {
       return NextResponse.json({ ok: false, reason: "Order not found" }, { status: 404 });
@@ -29,14 +34,17 @@ export async function GET(request: Request) {
       return NextResponse.json({ ok: true, orderId: order.orderId, mock: true });
     }
 
-    const whish = getWhishClient();
-    const status = await whish.getPaymentStatus(parsed.currency, parsed.externalId);
+    const whish = await getWhishClient();
+    const status = await whish.getPaymentStatus(currency, parsed.externalId);
 
     if (status.collectStatus !== "success") {
       return NextResponse.json({ ok: false, reason: "Payment not successful" });
     }
 
-    if (!whish.validateAmount(status.amount ?? 0, order.total, parsed.currency)) {
+    if (
+      typeof status.amount === "number" &&
+      !whish.validateAmount(status.amount, order.total, currency)
+    ) {
       return NextResponse.json({ ok: false, reason: "Amount mismatch" }, { status: 400 });
     }
 

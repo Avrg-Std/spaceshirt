@@ -187,7 +187,7 @@ export async function POST(request: Request) {
           );
         }
 
-        const whish = getWhishClient();
+        const whish = await getWhishClient();
         const externalId = whish.generateExternalId();
 
         createdOrder = await createCustomerOrder({
@@ -203,13 +203,14 @@ export async function POST(request: Request) {
           whishExternalId: String(externalId),
         });
 
+        const callbackQuery = `externalId=${encodeURIComponent(externalId)}&currency=USD`;
         const payment = await whish.createPayment({
           amount: total,
           currency: "USD",
           invoice: `Order ${createdOrder.orderId}`,
           externalId,
-          successCallbackUrl: `${websiteUrl}/api/whish/callback/success`,
-          failureCallbackUrl: `${websiteUrl}/api/whish/callback/failure`,
+          successCallbackUrl: `${websiteUrl}/api/whish/callback/success?${callbackQuery}`,
+          failureCallbackUrl: `${websiteUrl}/api/whish/callback/failure?${callbackQuery}`,
           successRedirectUrl: `${websiteUrl}/cart?whish=success&orderId=${encodeURIComponent(createdOrder.orderId)}`,
           failureRedirectUrl: `${websiteUrl}/cart?whish=failed&orderId=${encodeURIComponent(createdOrder.orderId)}`,
         });

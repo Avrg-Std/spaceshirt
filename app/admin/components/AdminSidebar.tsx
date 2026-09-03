@@ -9,6 +9,7 @@ const navItems = [
   { href: '/admin/orders', label: 'Orders' },
   { href: '/admin/customers', label: 'Customers' },
   { href: '/admin/homepage', label: 'Homepage' },
+  { href: '/admin/payments', label: 'Payments' },
 ]
 
 export default function AdminSidebar() {

@@ -1229,3 +1229,93 @@ export async function getCustomerOrders(email: string): Promise<CustomerOrder[]>
   const orders = await getOrders();
   return orders.filter((order) => order.email.trim().toLowerCase() === normalizedEmail);
 }
+
+export type AppWhishEnvironment = "sandbox" | "production";
+
+function getSettingsTablePath(): string {
+  const baseId = requiredEnv("AIRTABLE_BASE_ID");
+  const tableName =
+    process.env.AIRTABLE_SETTINGS_TABLE_NAME?.trim() || "App Settings";
+  return `${baseId}/${encodeURIComponent(tableName)}`;
+}
+
+function parseWhishEnvironment(value: unknown): AppWhishEnvironment | null {
+  const raw =
+    typeof value === "string"
+      ? value
+      : Array.isArray(value) && typeof value[0] === "string"
+        ? value[0]
+        : "";
+  const normalized = raw.trim().toLowerCase();
+  if (normalized === "production" || normalized === "live") return "production";
+  if (normalized === "sandbox") return "sandbox";
+  return null;
+}
+
+export async function getAppWhishEnvironment(): Promise<AppWhishEnvironment | null> {
+  try {
+    const query = new URLSearchParams();
+    query.set("pageSize", "1");
+    const data = await fetchAirtable(`${getSettingsTablePath()}?${query.toString()}`);
+    const record = data.records[0];
+    if (!record) return null;
+    return parseWhishEnvironment(
+      record.fields["Whish Environment"] ?? record.fields.Environment
+    );
+  } catch {
+    return null;
+  }
+}
+
+export async function setAppWhishEnvironment(
+  environment: AppWhishEnvironment
+): Promise<AppWhishEnvironment> {
+  try {
+    const query = new URLSearchParams();
+    query.set("pageSize", "1");
+    const existing = await fetchAirtable(
+      `${getSettingsTablePath()}?${query.toString()}`
+    );
+    const record = existing.records[0];
+
+    if (record) {
+      await mutateAirtable(getSettingsTablePath(), "PATCH", {
+        records: [
+          {
+            id: record.id,
+            fields: { "Whish Environment": environment },
+          },
+        ],
+        typecast: true,
+      });
+      return environment;
+    }
+
+    await mutateAirtable(getSettingsTablePath(), "POST", {
+      records: [
+        {
+          fields: {
+            Name: "Store",
+            "Whish Environment": environment,
+          },
+        },
+      ],
+      typecast: true,
+    });
+
+    return environment;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (
+      message.includes("NOT_FOUND") ||
+      message.includes("403") ||
+      message.includes("404") ||
+      message.includes("INVALID_PERMISSIONS")
+    ) {
+      throw new Error(
+        'Create an Airtable table named "App Settings" with fields Name (text) and Whish Environment (single select: sandbox, production), then try again.'
+      );
+    }
+    throw error;
+  }
+}
