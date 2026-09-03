@@ -836,35 +836,10 @@ async function listAllSizeInventoryRows(): Promise<SizeInventoryRow[]> {
 async function listSizeInventoryRowsForProduct(
   productId: string
 ): Promise<SizeInventoryRow[]> {
-  const query = new URLSearchParams();
-  query.set("pageSize", "100");
-  query.set(
-    "filterByFormula",
-    `FIND("${productId}", ARRAYJOIN({Product}))`
-  );
-
-  const data = await fetchAirtable(
-    `${getSizeInventoryTablePath()}?${query.toString()}`
-  );
-
-  return data.records
-    .map((record) => {
-      const productIds = Array.isArray(record.fields.Product)
-        ? record.fields.Product.filter(
-            (item): item is string => typeof item === "string" && isAirtableRecordId(item)
-          )
-        : [];
-      if (!productIds.includes(productId)) return null;
-      const sizeRaw = firstString(record.fields.Size);
-      if (!sizeRaw) return null;
-      return {
-        id: record.id,
-        productId,
-        size: normalizeSizeLabel(sizeRaw),
-        quantity: toNumber(record.fields["Quantity in Stock"]) ?? 0,
-      } satisfies SizeInventoryRow;
-    })
-    .filter((row): row is SizeInventoryRow => row !== null);
+  // Airtable ARRAYJOIN({Product}) returns primary-field names, not record IDs,
+  // so FIND(recId, ...) never matches. Filter linked Product IDs in code instead.
+  const rows = await listAllSizeInventoryRows();
+  return rows.filter((row) => row.productId === productId);
 }
 
 async function attachSizeStockToProducts(products: Product[]): Promise<Product[]> {
