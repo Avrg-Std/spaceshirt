@@ -28,14 +28,20 @@ export default function Navbar() {
 
   return (
     <nav className="fixed top-0 left-0 w-full z-50 px-6 py-6 md:px-12 flex justify-between items-center bg-transparent pointer-events-none">
-      <div className="flex gap-8 pointer-events-auto">
-        {['MAN', 'WOMAN', 'CREATE OUTFIT'].map((item) => (
+      <div className="flex gap-3 md:gap-8 pointer-events-auto max-md:max-w-[46vw] max-md:overflow-x-auto">
+        {[
+          { label: 'MAN', href: '#' },
+          { label: 'WOMAN', href: '#' },
+          { label: 'WINTER', href: '/products?collection=Winter' },
+          { label: 'SUMMER', href: '/products?collection=Summer' },
+          { label: 'CREATE OUTFIT', href: '#' },
+        ].map((item) => (
           <Link
-            key={item}
-            href="#"
+            key={item.label}
+            href={item.href}
             className="text-xs font-medium tracking-wide text-foreground hover:text-gray-500 transition-colors uppercase"
           >
-            {item}
+            {item.label}
           </Link>
         ))}
       </div>

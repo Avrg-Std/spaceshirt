@@ -35,7 +35,7 @@ export default function AdminSizeStock({ value, onChange }: AdminSizeStockProps)
         Enter quantity per size. Total stock updates automatically. Set 0 to hide a size.
       </p>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
         {PRODUCT_SIZE_OPTIONS.map((size) => (
           <label
             key={size}

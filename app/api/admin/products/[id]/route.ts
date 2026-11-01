@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import {
   deleteProduct,
   getProductByRecordId,
+  normalizeCollection,
   PRODUCT_SIZE_OPTIONS,
   sanitizeSizeStock,
   updateProduct,
@@ -34,6 +35,9 @@ function parseProductPatch(body: Record<string, unknown>): Partial<ProductInput>
   if (typeof body.title === "string") patch.title = body.title.trim();
   if (typeof body.description === "string") patch.description = body.description.trim();
   if (typeof body.category === "string") patch.category = body.category.trim();
+  if (typeof body.collection === "string") {
+    patch.collection = normalizeCollection(body.collection);
+  }
   if (body.price !== undefined) {
     const price = typeof body.price === "number" ? body.price : Number(body.price);
     if (!Number.isFinite(price)) throw new Error("Valid price is required");

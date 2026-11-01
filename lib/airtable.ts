@@ -1,21 +1,27 @@
 import "server-only";
 
 import {
+  normalizeCollection,
   normalizeSizeLabel,
+  PRODUCT_COLLECTIONS,
   PRODUCT_SIZE_OPTIONS,
   sanitizeSizeStock,
   sizesFromStock,
   sumSizeStock,
+  type ProductCollection,
   type ProductSize,
   type SizeStockMap,
 } from "@/lib/product-sizes";
 
 export {
+  normalizeCollection,
   normalizeSizeLabel,
+  PRODUCT_COLLECTIONS,
   PRODUCT_SIZE_OPTIONS,
   sanitizeSizeStock,
   sizesFromStock,
   sumSizeStock,
+  type ProductCollection,
   type ProductSize,
   type SizeStockMap,
 } from "@/lib/product-sizes";
@@ -49,6 +55,7 @@ export type Product = {
   price: number;
   description: string;
   category: string;
+  collection: ProductCollection | null;
   image: string;
   stock: number | null;
   sizes: string[];
@@ -65,6 +72,7 @@ export type ProductInput = {
   price: number;
   description: string;
   category: string;
+  collection?: ProductCollection | null;
   image?: string;
   stock?: number | null;
   sizes?: string[];
@@ -224,6 +232,9 @@ function mapRecordToProduct(record: AirtableRecord): Product {
     "No description available.";
   const category =
     firstString(getField(record, ["Category", "Type"])) ?? "Uncategorized";
+  const collection = normalizeCollection(
+    firstString(getField(record, ["Collection"])) ?? ""
+  );
   const image =
     imageFromField(
       getField(record, ["Images", "Image 1", "Image 2", "images", "Image", "Photo"])
@@ -240,6 +251,7 @@ function mapRecordToProduct(record: AirtableRecord): Product {
     price,
     description,
     category,
+    collection,
     image,
     stock,
     sizes: sizes.length ? sizes : ["S", "M", "L", "XL"],
@@ -319,6 +331,10 @@ function productInputToFields(
     Description: input.description,
     Category: input.category,
   };
+
+  if (input.collection !== undefined) {
+    fields.Collection = input.collection;
+  }
 
   if (input.stock !== undefined) {
     fields.Stock = input.stock;
@@ -749,6 +765,8 @@ export async function updateProduct(
     price: input.price ?? existing.price,
     description: input.description ?? existing.description,
     category: input.category ?? existing.category,
+    collection:
+      input.collection !== undefined ? input.collection : existing.collection,
     image: input.image !== undefined ? input.image : existing.image,
     stock:
       input.sizeStock !== undefined

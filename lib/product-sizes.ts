@@ -1,21 +1,59 @@
 export const PRODUCT_SIZE_OPTIONS = [
+  "XS",
   "S",
   "M",
   "L",
   "XL",
   "XXL",
+  "3XL",
+  "4XL",
+  "5XL",
+  "6XL",
   "ONE SIZE",
 ] as const;
+
+export const PRODUCT_COLLECTIONS = ["Winter", "Summer"] as const;
+export type ProductCollection = (typeof PRODUCT_COLLECTIONS)[number];
 
 export type ProductSize = (typeof PRODUCT_SIZE_OPTIONS)[number];
 export type SizeStockMap = Partial<Record<ProductSize, number>>;
 
+const SIZE_ALIASES: Record<string, ProductSize> = {
+  XS: "XS",
+  XSMALL: "XS",
+  "X-SMALL": "XS",
+  S: "S",
+  SMALL: "S",
+  M: "M",
+  MEDIUM: "M",
+  L: "L",
+  LARGE: "L",
+  XL: "XL",
+  XXL: "XXL",
+  "2XL": "XXL",
+  "3XL": "3XL",
+  XXXL: "3XL",
+  "4XL": "4XL",
+  XXXXL: "4XL",
+  "5XL": "5XL",
+  XXXXXL: "5XL",
+  "6XL": "6XL",
+  XXXXXXL: "6XL",
+  "ONE SIZE": "ONE SIZE",
+  ONESIZE: "ONE SIZE",
+  OS: "ONE SIZE",
+};
+
 export function normalizeSizeLabel(value: string): string {
-  const trimmed = value.trim().toUpperCase();
-  if (trimmed === "ONE SIZE" || trimmed === "ONESIZE" || trimmed === "OS") {
-    return "ONE SIZE";
-  }
-  return trimmed;
+  const trimmed = value.trim().toUpperCase().replace(/\s+/g, " ");
+  return SIZE_ALIASES[trimmed] ?? trimmed;
+}
+
+export function normalizeCollection(value: string): ProductCollection | null {
+  const trimmed = value.trim().toLowerCase();
+  if (trimmed === "winter") return "Winter";
+  if (trimmed === "summer") return "Summer";
+  return null;
 }
 
 export function sumSizeStock(sizeStock: SizeStockMap): number {

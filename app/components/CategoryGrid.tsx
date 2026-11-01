@@ -15,6 +15,8 @@ const categories = [
   { id: 'new-arrivals', title: 'NEW ARRIVALS', image: '/images/image 5.jpeg', span: 'md:col-span-4 md:row-span-1' },
   { id: 'accessories', title: 'ACCESSORIES', image: '/images/image 17.jpeg', span: 'md:col-span-4 md:row-span-1' },
   { id: 'best-sellers', title: 'BEST SELLERS', image: '/images/image 19.jpeg', span: 'md:col-span-8 md:row-span-1' },
+  { id: 'winter', title: 'WINTER', image: '/images/image 10.jpeg', span: 'md:col-span-6 md:row-span-1', href: '/products?collection=Winter' },
+  { id: 'summer', title: 'SUMMER', image: '/images/image 12.jpeg', span: 'md:col-span-6 md:row-span-1', href: '/products?collection=Summer' },
 ]
 
 export default function CategoryGrid() {
@@ -64,7 +66,7 @@ export default function CategoryGrid() {
       <div className="grid grid-cols-1 md:grid-cols-12 gap-4 auto-rows-[300px] md:auto-rows-[400px]">
         {categories.map((cat) => (
           <Link 
-            href={`/products?category=${cat.title.replace(' ', '+')}`} 
+            href={'href' in cat && cat.href ? cat.href : `/products?category=${cat.title.replace(' ', '+')}`} 
             key={cat.id} 
             className={`category-card relative rounded-[var(--radius-3xl)] overflow-hidden group shadow-[var(--shadow-card)] block ${cat.span}`}
           >

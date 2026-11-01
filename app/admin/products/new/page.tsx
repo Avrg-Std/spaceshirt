@@ -2,10 +2,10 @@
 
 import { FormEvent, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { AdminCard, AdminInput, AdminPageHeader, AdminTextarea } from '../../components/AdminUI'
+import { AdminCard, AdminInput, AdminPageHeader, AdminSelect, AdminTextarea } from '../../components/AdminUI'
 import AdminImageUpload from '../../components/AdminImageUpload'
 import AdminSizeStock from '../../components/AdminSizeStock'
-import type { SizeStockMap } from '@/lib/product-sizes'
+import { PRODUCT_COLLECTIONS, type SizeStockMap } from '@/lib/product-sizes'
 
 export default function NewProductPage() {
   const router = useRouter()
@@ -28,6 +28,7 @@ export default function NewProductPage() {
           title: formData.get('title'),
           description: formData.get('description'),
           category: formData.get('category'),
+          collection: formData.get('collection'),
           price: Number(formData.get('price')),
           rating: formData.get('rating') ? Number(formData.get('rating')) : null,
           image: formData.get('image'),
@@ -58,6 +59,14 @@ export default function NewProductPage() {
           <AdminInput label="Title" name="title" required />
           <AdminTextarea label="Description" name="description" />
           <AdminInput label="Category" name="category" defaultValue="Uncategorized" />
+          <AdminSelect label="Collection" name="collection" defaultValue="">
+            <option value="">None</option>
+            {PRODUCT_COLLECTIONS.map((collection) => (
+              <option key={collection} value={collection}>
+                {collection}
+              </option>
+            ))}
+          </AdminSelect>
           <AdminInput label="Price" name="price" type="number" step="0.01" min="0" required />
           <AdminSizeStock value={sizeStock} onChange={setSizeStock} />
           <AdminInput label="Rating" name="rating" type="number" step="0.1" min="0" max="5" />
