@@ -59,7 +59,7 @@ export default function NewProductPage() {
           <AdminInput label="Title" name="title" required />
           <AdminTextarea label="Description" name="description" />
           <AdminInput label="Category" name="category" defaultValue="Uncategorized" />
-          <AdminSelect label="Collection" name="collection" defaultValue="">
+          <AdminSelect label="Season (sub-category)" name="collection" defaultValue="">
             <option value="">None</option>
             {PRODUCT_COLLECTIONS.map((collection) => (
               <option key={collection} value={collection}>

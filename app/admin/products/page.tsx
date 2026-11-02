@@ -88,7 +88,7 @@ export default function AdminProductsPage() {
                   <th className="px-6 py-4 text-xs uppercase tracking-wider text-neutral-500">Image</th>
                   <th className="px-6 py-4 text-xs uppercase tracking-wider text-neutral-500">Product</th>
                   <th className="px-6 py-4 text-xs uppercase tracking-wider text-neutral-500">Category</th>
-                  <th className="px-6 py-4 text-xs uppercase tracking-wider text-neutral-500">Collection</th>
+                  <th className="px-6 py-4 text-xs uppercase tracking-wider text-neutral-500">Season</th>
                   <th className="px-6 py-4 text-xs uppercase tracking-wider text-neutral-500">Price</th>
                   <th className="px-6 py-4 text-xs uppercase tracking-wider text-neutral-500">Stock</th>
                   <th className="px-6 py-4 text-xs uppercase tracking-wider text-neutral-500">Actions</th>

@@ -89,7 +89,7 @@ export default function EditProductPage() {
             defaultValue={product.description}
           />
           <AdminInput label="Category" name="category" defaultValue={product.category} />
-          <AdminSelect label="Collection" name="collection" defaultValue={product.collection ?? ''}>
+          <AdminSelect label="Season (sub-category)" name="collection" defaultValue={product.collection ?? ''}>
             <option value="">None</option>
             {PRODUCT_COLLECTIONS.map((collection) => (
               <option key={collection} value={collection}>

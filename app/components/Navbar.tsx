@@ -32,8 +32,6 @@ export default function Navbar() {
         {[
           { label: 'MAN', href: '#' },
           { label: 'WOMAN', href: '#' },
-          { label: 'WINTER', href: '/products?collection=Winter' },
-          { label: 'SUMMER', href: '/products?collection=Summer' },
           { label: 'CREATE OUTFIT', href: '#' },
         ].map((item) => (
           <Link
