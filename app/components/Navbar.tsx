@@ -4,8 +4,13 @@ import { useEffect, useRef } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import gsap from 'gsap'
-import { ShoppingCart } from 'lucide-react'
+import { Mars, ShoppingCart, Venus } from 'lucide-react'
 import { useCart } from '../hooks/useCart'
+
+const navLinks = [
+  { label: 'MAN', href: '/products?category=MAN', Icon: Mars },
+  { label: 'WOMAN', href: '/products?category=WOMAN', Icon: Venus },
+]
 
 export default function Navbar() {
   const cartIconRef = useRef(null)
@@ -28,18 +33,18 @@ export default function Navbar() {
 
   return (
     <nav className="fixed top-0 left-0 w-full z-50 px-6 py-6 md:px-12 flex justify-between items-center bg-transparent pointer-events-none">
-      <div className="flex gap-3 md:gap-8 pointer-events-auto max-md:max-w-[46vw] max-md:overflow-x-auto">
-        {[
-          { label: 'MAN', href: '#' },
-          { label: 'WOMAN', href: '#' },
-          { label: 'CREATE OUTFIT', href: '#' },
-        ].map((item) => (
+      <div className="flex items-center gap-3 md:gap-8 pointer-events-auto">
+        {navLinks.map(({ label, href, Icon }) => (
           <Link
-            key={item.label}
-            href={item.href}
-            className="text-xs font-medium tracking-wide text-foreground hover:text-gray-500 transition-colors uppercase"
+            key={label}
+            href={href}
+            aria-label={label}
+            className="text-foreground hover:text-gray-500 transition-colors"
           >
-            {item.label}
+            <Icon className="md:hidden" size={20} strokeWidth={1.75} />
+            <span className="hidden md:inline text-xs font-medium tracking-wide uppercase">
+              {label}
+            </span>
           </Link>
         ))}
       </div>

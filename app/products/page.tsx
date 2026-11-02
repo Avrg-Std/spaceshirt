@@ -88,13 +88,10 @@ function ProductsCatalog() {
       : 'ALL PRODUCTS'
 
   const emptyMessage = (() => {
-    const parts: string[] = []
-    if (activeCategory !== 'All') parts.push(activeCategory)
-    if (activeCollection !== 'All') parts.push(activeCollection)
-    if (parts.length === 0) {
-      return 'No products yet. Add products in the admin panel.'
+    if (activeCategory !== 'All' || activeCollection !== 'All') {
+      return 'Nothing here right now. Try another filter.'
     }
-    return `No products match ${parts.join(' · ')}. Try another category or season, or assign them in the admin panel.`
+    return 'No products available right now.'
   })()
 
   useEffect(() => {
@@ -180,11 +177,6 @@ function ProductsCatalog() {
               <h1 className="text-5xl md:text-7xl font-bebas tracking-wider text-[var(--color-foreground)]">
                 {pageTitle}
               </h1>
-              {activeCollection !== 'All' ? (
-                <p className="mt-2 text-sm uppercase tracking-wider text-gray-400">
-                  Season: {activeCollection}
-                </p>
-              ) : null}
            </div>
            
            <div className="flex flex-col items-end gap-3">
@@ -208,23 +200,20 @@ function ProductsCatalog() {
                  Sort
               </button>
               </div>
-              <div className="flex items-center gap-3">
-                <span className="text-xs uppercase tracking-wider text-gray-500">Season</span>
-                <div className="flex bg-white/5 border border-white/10 p-1 rounded-full">
-                  {['All', ...PRODUCT_COLLECTIONS].map((collection) => (
-                    <button
-                      key={collection}
-                      onClick={() => updateFilters({ collection })}
-                      className={`px-5 py-2 rounded-full text-sm font-bebas tracking-wider transition-colors whitespace-nowrap ${
-                        activeCollection === collection
-                          ? 'bg-[var(--color-accent)] text-black'
-                          : 'text-gray-400 hover:text-white hover:bg-white/5'
-                      }`}
-                    >
-                      {collection === 'All' ? 'ALL SEASONS' : collection.toUpperCase()}
-                    </button>
-                  ))}
-                </div>
+              <div className="flex bg-white/5 border border-white/10 p-1 rounded-full">
+                {['All', ...PRODUCT_COLLECTIONS].map((collection) => (
+                  <button
+                    key={collection}
+                    onClick={() => updateFilters({ collection })}
+                    className={`px-5 py-2 rounded-full text-sm font-bebas tracking-wider transition-colors whitespace-nowrap ${
+                      activeCollection === collection
+                        ? 'bg-[var(--color-accent)] text-black'
+                        : 'text-gray-400 hover:text-white hover:bg-white/5'
+                    }`}
+                  >
+                    {collection === 'All' ? 'ALL SEASONS' : collection.toUpperCase()}
+                  </button>
+                ))}
               </div>
            </div>
         </div>
