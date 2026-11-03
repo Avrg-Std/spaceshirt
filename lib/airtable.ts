@@ -1,6 +1,7 @@
 import "server-only";
 
 import {
+  normalizeCategory,
   normalizeCollection,
   normalizeSizeLabel,
   PRODUCT_COLLECTIONS,
@@ -14,6 +15,7 @@ import {
 } from "@/lib/product-sizes";
 
 export {
+  normalizeCategory,
   normalizeCollection,
   normalizeSizeLabel,
   PRODUCT_COLLECTIONS,
@@ -230,8 +232,9 @@ function mapRecordToProduct(record: AirtableRecord): Product {
   const description =
     firstString(getField(record, ["Description", "Details", "Summary"])) ??
     "No description available.";
-  const category =
-    firstString(getField(record, ["Category", "Type"])) ?? "Uncategorized";
+  const category = normalizeCategory(
+    firstString(getField(record, ["Category", "Type"])) ?? "Uncategorized"
+  );
   const collection = normalizeCollection(
     firstString(getField(record, ["Collection"])) ?? ""
   );

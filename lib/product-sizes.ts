@@ -56,6 +56,20 @@ export function normalizeCollection(value: string): ProductCollection | null {
   return null;
 }
 
+const CATEGORY_ALIASES: Record<string, string> = {
+  man: "MEN",
+  men: "MEN",
+  woman: "WOMEN",
+  women: "WOMEN",
+};
+
+/** Canonicalize category labels (e.g. Man/MAN → MEN, Woman/WOMAN → WOMEN). */
+export function normalizeCategory(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return trimmed;
+  return CATEGORY_ALIASES[trimmed.toLowerCase()] ?? trimmed;
+}
+
 export function sumSizeStock(sizeStock: SizeStockMap): number {
   return Object.values(sizeStock).reduce((sum, qty) => sum + (qty ?? 0), 0);
 }

@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { PRODUCT_COLLECTIONS } from '@/lib/product-sizes'
+import { normalizeCategory, PRODUCT_COLLECTIONS } from '@/lib/product-sizes'
 import gsap from 'gsap'
 import ProductCard from '../components/ProductCard'
 import Navbar from '../components/Navbar'
@@ -36,7 +36,10 @@ function ProductsCatalog() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const categories = ['All', ...Array.from(new Set(products.map((p) => p.category))).sort()]
+  const categories = [
+    'All',
+    ...Array.from(new Set(products.map((p) => normalizeCategory(p.category)))).sort(),
+  ]
   const [activeCategory, setActiveCategory] = useState('All')
   const [activeCollection, setActiveCollection] = useState('All')
 
@@ -45,12 +48,11 @@ function ProductsCatalog() {
     if (!requestedCategory) {
       setActiveCategory('All')
     } else {
-      const available = Array.from(new Set(products.map((p) => p.category)))
-      const match = available.find(
-        (cat) => cat.toLowerCase() === requestedCategory.toLowerCase()
-      )
+      const canonical = normalizeCategory(requestedCategory)
+      const available = Array.from(new Set(products.map((p) => normalizeCategory(p.category))))
+      const match = available.find((cat) => cat.toLowerCase() === canonical.toLowerCase())
       // Prefer catalog casing; keep URL value while products are still loading
-      setActiveCategory(match ?? (products.length === 0 ? requestedCategory : 'All'))
+      setActiveCategory(match ?? (products.length === 0 ? canonical : 'All'))
     }
 
     const requestedCollection = searchParams.get('collection')?.trim().toLowerCase()
@@ -76,7 +78,9 @@ function ProductsCatalog() {
   }
 
   const filteredProducts = products.filter((product) => {
-    const categoryMatch = activeCategory === 'All' || product.category === activeCategory
+    const categoryMatch =
+      activeCategory === 'All' ||
+      normalizeCategory(product.category) === activeCategory
     const collectionMatch =
       activeCollection === 'All' || product.collection === activeCollection
     return categoryMatch && collectionMatch

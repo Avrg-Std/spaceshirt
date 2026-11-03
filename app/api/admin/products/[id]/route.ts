@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import {
   deleteProduct,
   getProductByRecordId,
+  normalizeCategory,
   normalizeCollection,
   PRODUCT_SIZE_OPTIONS,
   sanitizeSizeStock,
@@ -34,7 +35,7 @@ function parseProductPatch(body: Record<string, unknown>): Partial<ProductInput>
 
   if (typeof body.title === "string") patch.title = body.title.trim();
   if (typeof body.description === "string") patch.description = body.description.trim();
-  if (typeof body.category === "string") patch.category = body.category.trim();
+  if (typeof body.category === "string") patch.category = normalizeCategory(body.category);
   if (typeof body.collection === "string") {
     patch.collection = normalizeCollection(body.collection);
   }

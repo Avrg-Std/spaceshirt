@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import {
   createProduct,
   getProducts,
+  normalizeCategory,
   normalizeCollection,
   PRODUCT_SIZE_OPTIONS,
   sanitizeSizeStock,
@@ -32,7 +33,8 @@ function parseProductInput(body: Record<string, unknown>): ProductInput {
   const title = typeof body.title === "string" ? body.title.trim() : "";
   const description =
     typeof body.description === "string" ? body.description.trim() : "";
-  const category = typeof body.category === "string" ? body.category.trim() : "";
+  const category =
+    typeof body.category === "string" ? normalizeCategory(body.category) : "";
   const collection =
     typeof body.collection === "string" ? normalizeCollection(body.collection) : null;
   const price = typeof body.price === "number" ? body.price : Number(body.price);

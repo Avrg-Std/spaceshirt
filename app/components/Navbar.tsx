@@ -8,8 +8,8 @@ import { Mars, ShoppingCart, Venus } from 'lucide-react'
 import { useCart } from '../hooks/useCart'
 
 const navLinks = [
-  { label: 'MAN', href: '/products?category=MAN', Icon: Mars },
-  { label: 'WOMAN', href: '/products?category=WOMAN', Icon: Venus },
+  { label: 'MEN', href: '/products?category=MEN', Icon: Mars },
+  { label: 'WOMEN', href: '/products?category=WOMEN', Icon: Venus },
 ]
 
 export default function Navbar() {
