@@ -13,8 +13,7 @@ const categories = [
   { id: 'men', title: 'MEN', image: '/images/image 2.jpeg', span: 'md:col-span-8 md:row-span-2' },
   { id: 'women', title: 'WOMEN', image: '/images/image 6.jpeg', span: 'md:col-span-4 md:row-span-1' },
   { id: 'new-arrivals', title: 'NEW ARRIVALS', image: '/images/image 5.jpeg', span: 'md:col-span-4 md:row-span-1' },
-  { id: 'accessories', title: 'ACCESSORIES', image: '/images/image 17.jpeg', span: 'md:col-span-4 md:row-span-1' },
-  { id: 'best-sellers', title: 'BEST SELLERS', image: '/images/image 19.jpeg', span: 'md:col-span-8 md:row-span-1' },
+  { id: 'best-sellers', title: 'BEST SELLERS', image: '/images/image 19.jpeg', span: 'md:col-span-12 md:row-span-1' },
 ]
 
 export default function CategoryGrid() {

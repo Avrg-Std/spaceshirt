@@ -1,30 +1,40 @@
 import "server-only";
 
 import {
+  DEFAULT_PRODUCT_TYPES,
   normalizeCategory,
   normalizeCollection,
+  normalizeProductTypeGender,
   normalizeSizeLabel,
   PRODUCT_COLLECTIONS,
   PRODUCT_SIZE_OPTIONS,
+  PRODUCT_TYPE_GENDERS,
   sanitizeSizeStock,
   sizesFromStock,
   sumSizeStock,
   type ProductCollection,
   type ProductSize,
+  type ProductTypeGender,
   type SizeStockMap,
 } from "@/lib/product-sizes";
 
 export {
+  DEFAULT_PRODUCT_CATEGORIES,
+  DEFAULT_PRODUCT_TYPES,
   normalizeCategory,
   normalizeCollection,
+  normalizeProductType,
+  normalizeProductTypeGender,
   normalizeSizeLabel,
   PRODUCT_COLLECTIONS,
   PRODUCT_SIZE_OPTIONS,
+  PRODUCT_TYPE_GENDERS,
   sanitizeSizeStock,
   sizesFromStock,
   sumSizeStock,
   type ProductCollection,
   type ProductSize,
+  type ProductTypeGender,
   type SizeStockMap,
 } from "@/lib/product-sizes";
 
@@ -57,6 +67,7 @@ export type Product = {
   price: number;
   description: string;
   category: string;
+  /** Product type (Airtable Collection field). */
   collection: ProductCollection | null;
   image: string;
   stock: number | null;
@@ -84,6 +95,21 @@ export type ProductInput = {
   featuredOrder?: number | null;
   showOnNewest?: boolean;
   newestOrder?: number | null;
+};
+
+export type ProductType = {
+  id: string;
+  name: string;
+  gender: ProductTypeGender;
+  sortOrder: number;
+  active: boolean;
+};
+
+export type ProductTypeInput = {
+  name: string;
+  gender: ProductTypeGender;
+  sortOrder?: number;
+  active?: boolean;
 };
 
 export type OrderStatus =
@@ -1313,5 +1339,364 @@ export async function setAppWhishEnvironment(
       );
     }
     throw error;
+  }
+}
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export function normalizeOrderNotifyEmails(value: unknown): string[] {
+  const raw =
+    typeof value === "string"
+      ? value
+      : Array.isArray(value)
+        ? value.filter((item): item is string => typeof item === "string").join("\n")
+        : "";
+
+  const seen = new Set<string>();
+  const emails: string[] = [];
+
+  for (const part of raw.split(/[\n,;]+/)) {
+    const email = part.trim().toLowerCase();
+    if (!email || !EMAIL_PATTERN.test(email) || seen.has(email)) continue;
+    seen.add(email);
+    emails.push(email);
+  }
+
+  return emails;
+}
+
+function settingsFieldMissingError(error: unknown, fieldLabel: string): Error {
+  const message = error instanceof Error ? error.message : String(error);
+  if (
+    message.includes("NOT_FOUND") ||
+    message.includes("403") ||
+    message.includes("404") ||
+    message.includes("INVALID_PERMISSIONS") ||
+    message.includes("UNKNOWN_FIELD_NAME")
+  ) {
+    return new Error(
+      `Add an "${fieldLabel}" (long text) field to the Airtable App Settings table, then try again.`
+    );
+  }
+  return error instanceof Error ? error : new Error(message);
+}
+
+export async function getOrderNotifyEmails(): Promise<string[]> {
+  try {
+    const query = new URLSearchParams();
+    query.set("pageSize", "1");
+    const data = await fetchAirtable(`${getSettingsTablePath()}?${query.toString()}`);
+    const record = data.records[0];
+    if (!record) return [];
+    return normalizeOrderNotifyEmails(
+      record.fields["Order Notify Emails"] ?? record.fields.OrderNotifyEmails
+    );
+  } catch (error) {
+    throw settingsFieldMissingError(error, "Order Notify Emails");
+  }
+}
+
+export async function setOrderNotifyEmails(emails: string[]): Promise<string[]> {
+  const normalized = normalizeOrderNotifyEmails(emails.join("\n"));
+  const joined = normalized.join("\n");
+
+  try {
+    const query = new URLSearchParams();
+    query.set("pageSize", "1");
+    const existing = await fetchAirtable(
+      `${getSettingsTablePath()}?${query.toString()}`
+    );
+    const record = existing.records[0];
+
+    if (record) {
+      await mutateAirtable(getSettingsTablePath(), "PATCH", {
+        records: [
+          {
+            id: record.id,
+            fields: { "Order Notify Emails": joined },
+          },
+        ],
+        typecast: true,
+      });
+      return normalized;
+    }
+
+    await mutateAirtable(getSettingsTablePath(), "POST", {
+      records: [
+        {
+          fields: {
+            Name: "Store",
+            "Order Notify Emails": joined,
+          },
+        },
+      ],
+      typecast: true,
+    });
+
+    return normalized;
+  } catch (error) {
+    throw settingsFieldMissingError(error, "Order Notify Emails");
+  }
+}
+
+function getProductTypesTablePath(): string {
+  const baseId = requiredEnv("AIRTABLE_BASE_ID");
+  const tableName =
+    process.env.AIRTABLE_PRODUCT_TYPES_TABLE_NAME?.trim() || "Product Types";
+  return `${baseId}/${encodeURIComponent(tableName)}`;
+}
+
+function mapRecordToProductType(record: AirtableRecord): ProductType | null {
+  const name = firstString(getField(record, ["Name"]))?.trim() ?? "";
+  const gender = normalizeProductTypeGender(
+    firstString(getField(record, ["Gender"])) ?? ""
+  );
+  if (!name || !gender) return null;
+
+  return {
+    id: record.id,
+    name,
+    gender,
+    sortOrder: toNumber(getField(record, ["Sort Order"])) ?? 0,
+    // Airtable omits unchecked checkboxes; treat missing as inactive.
+    active: toBoolean(getField(record, ["Active"])),
+  };
+}
+
+function productTypesTableMissingError(error: unknown): Error {
+  const message = error instanceof Error ? error.message : String(error);
+  if (
+    message.includes("NOT_FOUND") ||
+    message.includes("403") ||
+    message.includes("404") ||
+    message.includes("INVALID_PERMISSIONS")
+  ) {
+    return new Error(
+      'Create an Airtable table named "Product Types" with fields Name (text), Gender (MEN/WOMEN), Sort Order (number), and Active (checkbox), then try again.'
+    );
+  }
+  return error instanceof Error ? error : new Error(message);
+}
+
+export async function listProductTypeRecords(): Promise<ProductType[]> {
+  try {
+    const types: ProductType[] = [];
+    let offset: string | undefined;
+
+    do {
+      const query = new URLSearchParams();
+      query.set("pageSize", "100");
+      if (offset) query.set("offset", offset);
+
+      const data = await fetchAirtable(
+        `${getProductTypesTablePath()}?${query.toString()}`
+      );
+      for (const record of data.records) {
+        const mapped = mapRecordToProductType(record);
+        if (mapped) types.push(mapped);
+      }
+      offset = data.offset;
+    } while (offset);
+
+    return types.sort(
+      (a, b) =>
+        a.gender.localeCompare(b.gender) ||
+        a.sortOrder - b.sortOrder ||
+        a.name.localeCompare(b.name)
+    );
+  } catch (error) {
+    throw productTypesTableMissingError(error);
+  }
+}
+
+export async function ensureDefaultProductTypes(): Promise<ProductType[]> {
+  const existing = await listProductTypeRecords();
+  if (existing.length > 0) return existing;
+
+  const records: Array<{ fields: Record<string, unknown> }> = [];
+  for (const gender of PRODUCT_TYPE_GENDERS) {
+    DEFAULT_PRODUCT_TYPES[gender].forEach((name, index) => {
+      records.push({
+        fields: {
+          Name: name,
+          Gender: gender,
+          "Sort Order": index + 1,
+          Active: true,
+        },
+      });
+    });
+  }
+
+  try {
+    for (let i = 0; i < records.length; i += 10) {
+      const chunk = records.slice(i, i + 10);
+      await mutateAirtable(getProductTypesTablePath(), "POST", {
+        records: chunk,
+        typecast: true,
+      });
+    }
+  } catch (error) {
+    throw productTypesTableMissingError(error);
+  }
+
+  return listProductTypeRecords();
+}
+
+export async function getProductTypes(options?: {
+  gender?: ProductTypeGender | null;
+  activeOnly?: boolean;
+  ensureDefaults?: boolean;
+}): Promise<ProductType[]> {
+  const types = options?.ensureDefaults
+    ? await ensureDefaultProductTypes()
+    : await listProductTypeRecords();
+
+  return types.filter((type) => {
+    if (options?.activeOnly && !type.active) return false;
+    if (options?.gender && type.gender !== options.gender) return false;
+    return true;
+  });
+}
+
+export async function createProductType(
+  input: ProductTypeInput
+): Promise<ProductType> {
+  const name = input.name.trim().replace(/\s+/g, " ");
+  if (!name) throw new Error("Name is required");
+  if (!PRODUCT_TYPE_GENDERS.includes(input.gender)) {
+    throw new Error("Gender must be MEN or WOMEN");
+  }
+
+  const existing = await listProductTypeRecords();
+  const duplicate = existing.find(
+    (type) =>
+      type.gender === input.gender &&
+      type.name.toLowerCase() === name.toLowerCase()
+  );
+  if (duplicate) {
+    throw new Error(`"${name}" already exists for ${input.gender}`);
+  }
+
+  const sameGender = existing.filter((type) => type.gender === input.gender);
+  const nextOrder =
+    input.sortOrder ??
+    (sameGender.length
+      ? Math.max(...sameGender.map((type) => type.sortOrder)) + 1
+      : 1);
+
+  try {
+    const data = await mutateAirtable(getProductTypesTablePath(), "POST", {
+      records: [
+        {
+          fields: {
+            Name: name,
+            Gender: input.gender,
+            "Sort Order": nextOrder,
+            Active: input.active !== false,
+          },
+        },
+      ],
+      typecast: true,
+    });
+
+    const record = data.records[0];
+    const mapped = record ? mapRecordToProductType(record) : null;
+    if (!mapped) throw new Error("Airtable did not return a created product type");
+    return mapped;
+  } catch (error) {
+    throw productTypesTableMissingError(error);
+  }
+}
+
+async function cascadeRenameProductCollection(
+  oldName: string,
+  newName: string
+): Promise<void> {
+  const products = await getProducts();
+  const matches = products.filter(
+    (product) =>
+      product.collection &&
+      product.collection.toLowerCase() === oldName.toLowerCase()
+  );
+  if (matches.length === 0) return;
+
+  for (let i = 0; i < matches.length; i += 10) {
+    const chunk = matches.slice(i, i + 10);
+    await mutateAirtable(getProductsTablePath(), "PATCH", {
+      records: chunk.map((product) => ({
+        id: product.id,
+        fields: { Collection: newName },
+      })),
+      typecast: true,
+    });
+  }
+}
+
+export async function updateProductType(
+  id: string,
+  input: Partial<ProductTypeInput>
+): Promise<ProductType | null> {
+  const existingList = await listProductTypeRecords();
+  const existing = existingList.find((type) => type.id === id);
+  if (!existing) return null;
+
+  const nextName =
+    input.name !== undefined
+      ? input.name.trim().replace(/\s+/g, " ")
+      : existing.name;
+  if (!nextName) throw new Error("Name is required");
+
+  const nextGender = input.gender ?? existing.gender;
+  if (!PRODUCT_TYPE_GENDERS.includes(nextGender)) {
+    throw new Error("Gender must be MEN or WOMEN");
+  }
+
+  const duplicate = existingList.find(
+    (type) =>
+      type.id !== id &&
+      type.gender === nextGender &&
+      type.name.toLowerCase() === nextName.toLowerCase()
+  );
+  if (duplicate) {
+    throw new Error(`"${nextName}" already exists for ${nextGender}`);
+  }
+
+  const fields: Record<string, unknown> = {
+    Name: nextName,
+    Gender: nextGender,
+  };
+  if (input.sortOrder !== undefined) fields["Sort Order"] = input.sortOrder;
+  if (input.active !== undefined) fields.Active = input.active;
+
+  try {
+    const data = await mutateAirtable(getProductTypesTablePath(), "PATCH", {
+      records: [{ id, fields }],
+      typecast: true,
+    });
+
+    if (nextName !== existing.name) {
+      await cascadeRenameProductCollection(existing.name, nextName);
+    }
+
+    const record = data.records[0];
+    return record
+      ? mapRecordToProductType(record)
+      : { ...existing, name: nextName, gender: nextGender };
+  } catch (error) {
+    throw productTypesTableMissingError(error);
+  }
+}
+
+export async function deleteProductType(id: string): Promise<boolean> {
+  const existing = (await listProductTypeRecords()).find(
+    (type) => type.id === id
+  );
+  if (!existing) return false;
+
+  try {
+    await deleteAirtableRecord(getProductTypesTablePath(), id);
+    return true;
+  } catch (error) {
+    throw productTypesTableMissingError(error);
   }
 }

@@ -3,7 +3,10 @@ import {
   getCustomerOrderByWhishExternalId,
   updateCustomerOrderStatusByWhishExternalId,
 } from "@/lib/airtable";
-import { sendOrderConfirmationEmail } from "@/lib/email";
+import {
+  sendOrderAdminNotificationEmail,
+  sendOrderConfirmationEmail,
+} from "@/lib/email";
 import {
   getWhishClient,
   isWhishConfigured,
@@ -37,10 +40,12 @@ export async function GET(request: Request) {
             parsed.externalId,
             "Confirmed"
           )) ?? order;
-        void sendOrderConfirmationEmail({
+        const confirmed = {
           ...confirmedOrder,
-          status: "Confirmed",
-        }).catch(() => undefined);
+          status: "Confirmed" as const,
+        };
+        void sendOrderConfirmationEmail(confirmed).catch(() => undefined);
+        void sendOrderAdminNotificationEmail(confirmed).catch(() => undefined);
       }
       return NextResponse.json({
         ok: true,
@@ -71,10 +76,12 @@ export async function GET(request: Request) {
           parsed.externalId,
           "Confirmed"
         )) ?? order;
-      void sendOrderConfirmationEmail({
+      const confirmed = {
         ...confirmedOrder,
-        status: "Confirmed",
-      }).catch(() => undefined);
+        status: "Confirmed" as const,
+      };
+      void sendOrderConfirmationEmail(confirmed).catch(() => undefined);
+      void sendOrderAdminNotificationEmail(confirmed).catch(() => undefined);
     }
 
     return NextResponse.json({ ok: true, orderId: confirmedOrder.orderId });

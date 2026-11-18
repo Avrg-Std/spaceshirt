@@ -2,11 +2,12 @@
 
 import { FormEvent, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { AdminCard, AdminInput, AdminPageHeader, AdminSelect, AdminTextarea } from '../../components/AdminUI'
+import { AdminCard, AdminInput, AdminPageHeader, AdminTextarea } from '../../components/AdminUI'
 import AdminImageUpload from '../../components/AdminImageUpload'
 import AdminSizeStock from '../../components/AdminSizeStock'
+import AdminProductTaxonomy from '../../components/AdminProductTaxonomy'
 import type { Product } from '@/lib/airtable'
-import { PRODUCT_COLLECTIONS, type SizeStockMap } from '@/lib/product-sizes'
+import { type SizeStockMap } from '@/lib/product-sizes'
 
 export default function EditProductPage() {
   const params = useParams<{ id: string }>()
@@ -88,15 +89,10 @@ export default function EditProductPage() {
             name="description"
             defaultValue={product.description}
           />
-          <AdminInput label="Category" name="category" defaultValue={product.category} />
-          <AdminSelect label="Season (sub-category)" name="collection" defaultValue={product.collection ?? ''}>
-            <option value="">None</option>
-            {PRODUCT_COLLECTIONS.map((collection) => (
-              <option key={collection} value={collection}>
-                {collection}
-              </option>
-            ))}
-          </AdminSelect>
+          <AdminProductTaxonomy
+            defaultCategory={product.category}
+            defaultCollection={product.collection ?? ''}
+          />
           <AdminInput
             label="Price"
             name="price"

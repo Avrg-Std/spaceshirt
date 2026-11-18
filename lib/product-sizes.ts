@@ -12,8 +12,35 @@ export const PRODUCT_SIZE_OPTIONS = [
   "ONE SIZE",
 ] as const;
 
-export const PRODUCT_COLLECTIONS = ["Winter", "Summer"] as const;
-export type ProductCollection = (typeof PRODUCT_COLLECTIONS)[number];
+export const PRODUCT_TYPE_GENDERS = ["MEN", "WOMEN"] as const;
+export type ProductTypeGender = (typeof PRODUCT_TYPE_GENDERS)[number];
+
+/** Product type stored in Airtable Collection field. */
+export type ProductCollection = string;
+
+export const DEFAULT_PRODUCT_CATEGORIES = [
+  "MEN",
+  "WOMEN",
+  "NEW ARRIVALS",
+  "ACCESSORIES",
+  "BEST SELLERS",
+] as const;
+
+export const DEFAULT_PRODUCT_TYPES: Record<ProductTypeGender, readonly string[]> = {
+  MEN: ["T-shirt", "Pants", "Shorts", "Tanks", "Hoodies & jackets"],
+  WOMEN: [
+    "Sports bras",
+    "Leggings",
+    "Pants",
+    "Shorts",
+    "T-shirts & top",
+    "Hoodies & jackets",
+    "Two sets",
+  ],
+};
+
+/** @deprecated Prefer DEFAULT_PRODUCT_TYPES — kept empty for any leftover imports. */
+export const PRODUCT_COLLECTIONS: readonly string[] = [];
 
 export type ProductSize = (typeof PRODUCT_SIZE_OPTIONS)[number];
 export type SizeStockMap = Partial<Record<ProductSize, number>>;
@@ -49,10 +76,23 @@ export function normalizeSizeLabel(value: string): string {
   return SIZE_ALIASES[trimmed] ?? trimmed;
 }
 
+/** Normalize a product type name stored in Collection. Empty → null. */
+export function normalizeProductType(value: string): ProductCollection | null {
+  const trimmed = value.trim().replace(/\s+/g, " ");
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+/** Alias for normalizeProductType — Collection field holds product types. */
 export function normalizeCollection(value: string): ProductCollection | null {
-  const trimmed = value.trim().toLowerCase();
-  if (trimmed === "winter") return "Winter";
-  if (trimmed === "summer") return "Summer";
+  return normalizeProductType(value);
+}
+
+export function normalizeProductTypeGender(
+  value: string
+): ProductTypeGender | null {
+  const trimmed = value.trim().toUpperCase();
+  if (trimmed === "MEN" || trimmed === "MAN") return "MEN";
+  if (trimmed === "WOMEN" || trimmed === "WOMAN") return "WOMEN";
   return null;
 }
 
@@ -68,6 +108,11 @@ export function normalizeCategory(value: string): string {
   const trimmed = value.trim();
   if (!trimmed) return trimmed;
   return CATEGORY_ALIASES[trimmed.toLowerCase()] ?? trimmed;
+}
+
+/** Alias for normalizeCategory. */
+export function canonicalizeCategory(value: string): string {
+  return normalizeCategory(value);
 }
 
 export function sumSizeStock(sizeStock: SizeStockMap): number {
